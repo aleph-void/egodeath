@@ -81,6 +81,19 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
     parser: require('recast/parsers/babel'),
   });
 
+  // There is no user code to hide in an empty program. Running the full
+  // default-budget pipeline would instead obfuscate its own injected helpers,
+  // consuming gigabytes of heap for an otherwise empty input.
+  if (ast.program.body.length === 0) {
+    ast.program.body = buildConsoleKeywords();
+    const output = shebang + recast.print(ast).code;
+    return minify_sync(output, {
+      mangle: false,
+      compress: false,
+      format: { comments: false },
+    }).code || output;
+  }
+
   // Closed-* rename transforms run VERY early — before any structural
   // pre-transform (proxyFunctions in particular) rewrites the shapes
   // they rely on. proxyFunctions turns `obj.method(a, b)` into a call
