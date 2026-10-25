@@ -64,6 +64,7 @@ node dist/index.js --help
 npm run build              # Compile TypeScript to dist/
 npm run start              # Run the obfuscator (reads input.js)
 npm run test               # Run the test suite
+npm run typecheck          # Type check application, tests, and tools
 npm run obfuscate-package  # Run compatibility tests against npm packages
 ```
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env tsx
 // Standalone evaluation harness for the egodeath obfuscator.
 //
 // For each trial, this tool:
@@ -17,7 +17,7 @@
 // touches `src/__tests__/` and does not share global state with any other test.
 //
 // Usage:
-//   OPENAI_API_KEY=sk-... npx ts-node --project tools/tsconfig.json \
+//   OPENAI_API_KEY=sk-... npx tsx --tsconfig tools/tsconfig.json \
 //     tools/obfuscation-detection-test.ts --runs 20
 //
 //   npm run detect-obfuscation -- --runs 20 --model gpt-4o --verbose
@@ -179,7 +179,7 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 function printUsage(): void {
-  console.log(`Usage: ts-node tools/obfuscation-detection-test.ts [options]
+  console.log(`Usage: tsx tools/obfuscation-detection-test.ts [options]
 
 For each trial, randomly chooses between:
   (SAME)      one source module, obfuscated twice with DIFFERENT target-token
