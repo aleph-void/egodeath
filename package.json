@@ -31,13 +31,13 @@
     "@types/estraverse": "^5.1.7",
     "@types/estree": "^1.0.9",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.5",
     "jest": "^30.5.2",
-    "ts-jest": "^29.4.12",
+    "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2",
     "webcrack": "^2.16.0",
-    "webpack": "^5.111.1",
+    "webpack": "^5.112.1",
     "webpack-cli": "^7.2.3"
   }
 }
