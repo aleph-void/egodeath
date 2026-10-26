@@ -1,5 +1,4 @@
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
@@ -13,40 +12,21 @@ module.exports = {
   // Recycle workers between suites so generated code, timers, and compiler
   // state cannot accumulate until Node's heap is exhausted on CI runners.
   workerIdleMemoryLimit: '512MB',
+  // SWC transpiles TypeScript 7 tests and jsdom's ESM dependencies for Jest.
+  // Type checking remains a separate compiler check in CI.
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      tsconfig: {
-        types: ['node', 'jest'],
-        noUnusedLocals: false,
-        noUnusedParameters: false,
-      },
+    '^.+\\.tsx?$': ['@swc/jest', {
+      jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
+      module: { type: 'commonjs' },
     }],
-    // jsdom >=30 and its dependency chain (html-encoding-sniffer,
-    // @exodus/bytes, tough-cookie, parse5, css-tree, ...) ship ESM only.
-    // keywords.ts require()s jsdom synchronously, so Jest's CommonJS
-    // sandbox has to down-compile those packages before it can load them.
-    '^.+\\.(js|mjs|cjs)$': ['ts-jest', {
-      tsconfig: {
-        allowJs: true,
-        module: 'commonjs',
-        target: 'es2022',
-        types: ['node', 'jest'],
-        noUnusedLocals: false,
-        noUnusedParameters: false,
-      },
-      diagnostics: false,
+    '^.+\\.(js|mjs|cjs)$': ['@swc/jest', {
+      jsc: { parser: { syntax: 'ecmascript' }, target: 'es2022' },
+      module: { type: 'commonjs' },
     }],
   },
-  // Jest ignores all of node_modules by default, which would skip the
-  // transform above. Un-ignore exactly the ESM packages reachable from
-  // jsdom so everything else keeps its fast path -- transforming the whole
-  // of node_modules costs about 175s per cold-cache run of the full suite
-  // (measured on Node 22: 451s with an empty list, 277s with this one).
-  //
-  // To regenerate after a jsdom upgrade, list the packages whose
-  // package.json has "type": "module" in jsdom's require graph. A stale
-  // list surfaces as "Must use import to load ES Module: <path>" -- add
-  // the package from that path here.
+  // Transform only jsdom's ESM dependencies; leave other packages on Jest's
+  // default path. Revisit this list when upgrading jsdom if Jest reports an
+  // untransformed ESM import.
   transformIgnorePatterns: [
     `/node_modules/(?!(?:${[
       '@asamuzakjp/css-color',

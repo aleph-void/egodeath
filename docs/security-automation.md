@@ -24,12 +24,14 @@ npm audit --package-lock-only --include=dev --audit-level=high
 ```
 
 This checks the entire dependency tree, including vulnerabilities already in the
-lockfile. The September 21, 2026 audit is clean after replacing the obsolete
-`window` wrapper with jsdom and updating vulnerable transitive dependencies.
-jsdom stays on the 26.x line for compatibility with the CommonJS Jest setup;
-newer majors introduce ESM dependencies. Review dependency changes and run the
-tests before applying them. The workflows do not run `npm audit fix` or suppress
-existing findings.
+lockfile. Refresh vulnerable transitive dependencies in the lockfile and run the
+checks before merging; the workflows do not suppress findings or run audit fixes.
+
+TypeScript 7 builds and type checks the application, tests, and tools. Jest uses
+SWC to transpile tests and jsdom's ESM dependencies to CommonJS; `npm run typecheck`
+retains the compiler checks separately. CLI tools use tsx because ts-node relies on
+the legacy TypeScript compiler API. CI runs the build, type checks, and Jest suite
+on both supported Node.js versions.
 
 ## GitHub settings
 

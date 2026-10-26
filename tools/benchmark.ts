@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env tsx
 // Performance benchmark for the egodeath obfuscator.
 //
 // For each package under test, this tool:

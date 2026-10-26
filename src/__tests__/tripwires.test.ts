@@ -2,6 +2,13 @@ import { applyTripwires } from '../transforms/tripwires';
 import * as helpers from '../transformHelpers';
 import * as recast from 'recast';
 
+// SWC preserves ESM exports as getters. Give the payload-selection spies a
+// mutable module facade while keeping the real helpers as their defaults.
+jest.mock('../transformHelpers', () => ({
+  __esModule: true,
+  ...jest.requireActual('../transformHelpers'),
+}));
+
 const babelParser = require('recast/parsers/babel');
 
 function parse(code: string): any {
