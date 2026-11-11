@@ -1,0 +1,81 @@
+name: GitHub Packages
+
+# Publishes each release to GitHub Packages as @aleph-void/egodeath, so it is
+# listed under the repo's Packages. npmjs.com (release.yml) stays the primary
+# registry as unscoped `egodeath`; GitHub Packages requires a scoped name, so
+# the name is rewritten only in this job's checkout.
+#
+# Run manually with a tag (e.g. v1.0.2) to publish an existing release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.0.2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-packages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@aleph-void'
+
+      - name: Check tag matches package.json version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match package.json version $VERSION"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Use scoped package name
+        run: npm pkg set name=@aleph-void/egodeath
+
+      # prepack clean-builds; prepublishOnly runs typecheck + tests.
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # See ci.yml for the heap-size rationale.
+          NODE_OPTIONS: --max-old-space-size=6144
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            npm publish --registry https://npm.pkg.github.com --tag next
+          else
+            npm publish --registry https://npm.pkg.github.com
+          fi
