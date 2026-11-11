@@ -1,3 +1,4 @@
+import * as vm from 'node:vm';
 import * as recast from 'recast';
 import { applyPropertyKeyEncoding } from '../transforms/propertyKeyEncoding';
 import { applyStringArrayExtraction, setStringArrayDecoys, clearStringArrayDecoys } from '../transforms/stringArrayExtraction';
@@ -17,19 +18,28 @@ it('decodes each function-scope property once and leaves unused functions lazy',
   `, { parser });
   applyPropertyKeyEncoding(ast);
   flushCapturedGlobals(ast);
-  let constructions = 0;
-  function CountingRegExp(pattern: string) { constructions++; return new RegExp(pattern); }
-  const api = new Function('RegExp', recast.print(ast).code + '\nreturn {read, unused, nested};')(CountingRegExp);
-  expect(constructions).toBe(0);
+  // Instrument the literal's constructor in an isolated realm: lexical
+  // RegExp shadowing must no longer affect the captured constructor.
+  const context = vm.createContext({ constructions: 0 });
+  const api = vm.runInContext(`
+    const NativeRegExp = RegExp;
+    RegExp.prototype.constructor = function(pattern) {
+      constructions++;
+      return new NativeRegExp(pattern);
+    };
+    ${recast.print(ast).code}
+    ({read, unused, nested});
+  `, context);
+  expect(context.constructions).toBe(0);
   for (let i = 0; i < 10; i++) expect(api.read({ alpha: i, beta: 2 })).toBe(i + 2);
-  expect(constructions).toBe(2);
+  expect(context.constructions).toBe(2);
   const a = api.nested({ alpha: 7 });
   const b = api.nested({ alpha: 9 });
   expect(a()).toBe(7);
   expect(b()).toBe(9);
-  expect(constructions).toBe(3);
+  expect(context.constructions).toBe(3);
   expect(api.unused({ gamma: 5 })).toBe(5);
-  expect(constructions).toBe(4);
+  expect(context.constructions).toBe(4);
 });
 
 it('resumes the string chain, caches reverse reads, and never decodes tail decoys', () => {

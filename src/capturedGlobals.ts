@@ -15,8 +15,9 @@
  * `TypeError: RegExp is not a constructor`.
  *
  * Fix: once per obfuscate() run, issue a single program-level capture
- *   var <captureName> = RegExp;
- * and have every transform that wants `RegExp` (or any other commonly
+ *   var <captureName> = /(?:)/.constructor;
+ * The literal avoids top-level lexical shadowing of `RegExp` as well.
+ * Have every transform that wants `RegExp` (or any other commonly
  * shadowed global) reference the capture's unique name instead.
  *
  * The capture declarations are NOT unshifted into ast.program.body at
@@ -123,11 +124,18 @@ export function flushCapturedGlobals(ast: any): void {
     // renamed form, so the declaration must match or it won't bind.
     const renamed = (globals as any)[entry.name] && (globals as any)[entry.name].___val;
     const declName = renamed ? renamed : entry.name;
-    // The init `{type:'Identifier', name: globalName}` is flagged so
-    // later transforms (in particular globalVariableEncoding) know to
-    // skip it — encoding RegExp in `var X = RegExp;` would make the
-    // capture's init depend on the capture itself.
-    const initNode: any = {
+    // Mark capture initializers so global encoding skips them if a
+    // standalone caller runs another transform after flushing.
+    // A regex literal obtains the intrinsic without resolving a lexical
+    // `RegExp` binding, including a top-level binding still in its TDZ.
+    // Flush runs after regex encoding, so this helper literal stays intact.
+    const initNode: any = entry.global === 'RegExp' ? {
+      type: 'MemberExpression',
+      object: { type: 'RegExpLiteral', pattern: '(?:)', flags: '' },
+      property: { type: 'Identifier', name: 'constructor' },
+      computed: false,
+      __capturedGlobalInit: true,
+    } : {
       type: 'Identifier',
       name: entry.global,
       __capturedGlobalInit: true,

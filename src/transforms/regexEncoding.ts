@@ -52,8 +52,8 @@ export function applyRegexEncoding(ast: any): void {
 
   // Reference a program-level capture of `RegExp` to survive local
   // shadowing (e.g. lodash runInContext's `var RegExp = context.RegExp`).
-  // captureGlobal injects the `var X = RegExp;` declaration into
-  // ast.program.body on first request.
+  // captureGlobal registers the request; flushCapturedGlobals later emits
+  // the intrinsic capture before its uses, after regex rewriting is finished.
   const regexpCaptureName = captureGlobal(ast, 'RegExp');
 
   for (const entry of replacements) {

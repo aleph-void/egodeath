@@ -147,6 +147,9 @@ const complementNeg: Encoder = (n) => {
 const nestedShift: Encoder = (n) => {
   const shift = randInt(1, 4);
   // (n << s) >>> s === n  for 0 <= n < 2^(32-s)
+  // Other int32 values lose high bits (or their sign). Use an identity
+  // valid across the full int32 range instead.
+  if (n < 0 || n >= 2 ** (32 - shift)) return xorIdentity(n);
   return paren(bin('>>>', paren(bin('<<', num(n), num(shift))), num(shift)));
 };
 

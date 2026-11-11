@@ -24,9 +24,14 @@ describe('applyRegexEncoding', () => {
     // name to survive `var RegExp = ...` shadowing inside nested
     // scopes (see lodash runInContext). The rewritten literal should
     // still be a `new`-expression of that capture.
-    expect(out).toMatch(/var\s+\S+\s*=\s*RegExp\s*;/);
+    expect(out).toContain('/(?:)/.constructor');
     expect(out).toMatch(/new\s+\S+\s*\(\s*"test"/);
     expect(out).not.toContain('/test/');
+  });
+
+  it.each(['const', 'let', 'var'])('survives top-level %s RegExp shadowing', kind => {
+    const code = `${kind} RegExp=123; var result=/a/i.test("A");`;
+    expect(new Function(transform(code) + '; return result;')()).toBe(true);
   });
 
   it('preserves regex flags', () => {

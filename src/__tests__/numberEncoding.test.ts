@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { applyNumberEncoding } from '../transforms/numberEncoding';
 import { obfuscate } from '../obfuscator';
 import * as recast from 'recast';
@@ -71,6 +72,30 @@ describe('applyNumberEncoding', () => {
   it('encodes large numbers within int32 range', () => {
     const result = evalTransformed('var x = 100000;', 'x');
     expect(result).toBe(100000);
+  });
+
+  it.each([1, 2, 3, 4])('preserves int32 boundaries with nested shift %i', shift => {
+    const limit = 2 ** (32 - shift);
+    const values = [limit - 1, limit, 0x7fffffff, -42, -0x80000000]
+      .filter(value => value >= -0x80000000 && value <= 0x7fffffff);
+    for (const value of values) {
+      // Pick encoder 7 (nestedShift), then force the requested shift.
+      const bytes = (n: number) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+      const random = jest.spyOn(crypto, 'randomBytes');
+      random.mockReturnValue(bytes(0) as any);
+      random.mockReturnValueOnce(bytes(7) as any);
+      random.mockReturnValueOnce(bytes(shift - 1) as any);
+      try {
+        // A direct NumericLiteral also covers negative literals synthesized
+        // by earlier transforms, unlike parsed source's UnaryExpression.
+        const ast = parse('var x = 42;');
+        ast.program.body[0].declarations[0].init.value = value;
+        applyNumberEncoding(ast);
+        expect(new Function(recast.print(ast).code + '; return x;')()).toBe(value);
+      } finally {
+        random.mockRestore();
+      }
+    }
   });
 
   it('uses bitwise operators', () => {
