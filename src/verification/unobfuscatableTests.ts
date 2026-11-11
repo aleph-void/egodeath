@@ -230,8 +230,20 @@ export function testUrlLeak(targetTokens: number = 10000): ExtractionAttempt {
 
   const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
   const evidence = inspectSource(obfuscated);
+  const secretUrl = new URL(secret);
 
-  const directMatch = evidence.strings.some(value => value.includes(secret));
+  const directMatch = evidence.strings.some(value => {
+    try {
+      const parsed = new URL(value);
+      return (
+        parsed.protocol === secretUrl.protocol &&
+        parsed.hostname === secretUrl.hostname &&
+        parsed.pathname === secretUrl.pathname
+      );
+    } catch {
+      return false;
+    }
+  });
   const domainMatch = evidence.strings.some(value => {
     try {
       return new URL(value).hostname === 'api.internal.example.com';
