@@ -20,6 +20,8 @@ for (let i = 0; i < args.length; i++) {
       process.exit(1);
     }
     i++;
+  } else if (args[i] === '--no-console-stub') {
+    options.stubConsole = false;
   } else if (args[i] === '--help' || args[i] === '-h') {
     process.stdout.write(`Usage: egodeath [options] <input-file> [input-file...]
 
@@ -27,6 +29,9 @@ Options:
   --target-tokens <n>  Target output size in tokens (default: ${DEFAULT_OPTIONS.targetTokens.toLocaleString()})
                        Small inputs are bloated up to this limit.
                        Large inputs are obfuscated with less bloat.
+  --no-console-stub    Do not overwrite console methods with no-ops. Use when
+                       the target app keeps its own console/logging (the stub
+                       silences console process-wide).
   --help, -h           Show this help message
 
 When multiple files are given, dead code mutation draws donor code from
