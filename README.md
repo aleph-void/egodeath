@@ -22,30 +22,46 @@ nvm use   # picks up .nvmrc
 ## Installation
 
 ```bash
+npm install -g egodeath      # CLI
+npm install egodeath         # library
+```
+
+### Library usage
+
+```js
+const { obfuscate, obfuscateMultiple } = require('egodeath');
+
+const out = obfuscate(sourceCode, { targetTokens: 10000 });
+```
+
+### From source
+
+```bash
 npm install
 npm run build
+node dist/cli.js input.js > output.js
 ```
 
 ## CLI Usage
 
 ```bash
 # Basic usage
-node dist/index.js input.js > output.js
+npx egodeath input.js > output.js
 
 # With target token budget (default: 2,000,000)
-node dist/index.js --target-tokens 500000 input.js > output.js
+npx egodeath --target-tokens 500000 input.js > output.js
 
 # Minimal obfuscation (small output)
-node dist/index.js --target-tokens 10000 input.js > output.js
+npx egodeath --target-tokens 10000 input.js > output.js
 
 # Maximum bloat (10M tokens)
-node dist/index.js --target-tokens 10000000 input.js > output.js
+npx egodeath --target-tokens 10000000 input.js > output.js
 
 # Using environment variable
-INPUT_FILE=input.js node dist/index.js > output.js
+INPUT_FILE=input.js npx egodeath > output.js
 
 # Help
-node dist/index.js --help
+npx egodeath --help
 ```
 
 ### Options
