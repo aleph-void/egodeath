@@ -26,8 +26,11 @@ export function buildConsoleKeywords(): any[] {
  * These are structural identifiers that JavaScript/Node.js rely on.
  */
 const NEVER_OBFUSCATE = new Set([
-  // Module system
-  'exports', 'module', 'require', 'arguments',
+  // Module system. `__dirname`/`__filename` are the remaining two parameters of
+  // Node's CommonJS module wrapper `(exports, require, module, __filename,
+  // __dirname)` — module-scoped free variables with no declaration, so renaming
+  // a reference to them yields `ReferenceError: <name> is not defined` at load.
+  'exports', 'module', 'require', 'arguments', '__dirname', '__filename',
   // Special values
   'undefined', 'NaN', 'Infinity',
   // Reserved tokens used as property accessors
