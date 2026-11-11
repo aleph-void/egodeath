@@ -61,14 +61,17 @@ jobs:
 
       # prepack clean-builds; prepublishOnly runs typecheck + tests.
       # Pre-release tags (e.g. v1.1.0-beta.1) publish under the "next" dist-tag.
-      - name: Publish to npm
+      - name: Stage publish to npm
         env:
           # Tests run in prepublishOnly; see ci.yml for the heap-size rationale.
           NODE_OPTIONS: --max-old-space-size=6144
           PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
+          # The trusted publisher grants stage-publish only: the version is
+          # staged and goes live after approval on npmjs.com (or
+          # `npm stage approve <id>`). Same lifecycle scripts as npm publish.
           if [ "$PRERELEASE" = "true" ]; then
-            npm publish --access public --tag next
+            npm stage publish . --access public --tag next
           else
-            npm publish --access public
+            npm stage publish . --access public
           fi
