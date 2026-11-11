@@ -80,17 +80,26 @@ describe('applyTripwires', () => {
   });
 
   it('contains a payload in the if-body', () => {
-    let foundPayload = false;
-    for (let i = 0; i < 30; i++) {
-      const out = transform('function f(x, y) { var a = x + y; return a; }');
-      // Payloads include: null assignment, throw, while loop, return, XOR corruption
-      if (out.includes('= null') || out.includes('throw') ||
-          out.includes('while') || out.includes('return') && out.split('return').length > 2) {
-        foundPayload = true;
-        break;
-      }
+    // Injection is a 20% roll per function, and the old check recognised only
+    // 4 of the 5 payloads (not XOR corruption): ~16% per attempt, so 30
+    // attempts all missed ~0.5% of the time. Retry until a tripwire is actually
+    // injected and recognise every payload kind (same patterns as the
+    // deterministic per-payload tests below).
+    const src = 'function f(x, y) { var a = x + y; return a; }';
+    const payloads = [
+      /\w+\s*=\s*\w+\s*\^\s*\d+/, // corruption
+      /while\s*\(/, // busy loop
+      /return\s+-?\d+/, // return corruption
+      /throw\s+new Error/, // exception
+      /= null/, // nullification
+    ];
+    let injected: string | undefined;
+    for (let i = 0; i < 400 && injected === undefined; i++) {
+      const out = transform(src);
+      if (out !== recast.print(parse(src)).code) injected = out;
     }
-    expect(foundPayload).toBe(true);
+    expect(injected).toBeDefined();
+    expect(payloads.some((re) => re.test(injected!))).toBe(true);
   });
 });
 
