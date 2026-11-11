@@ -185,6 +185,30 @@ describe('regression: global-named members, params and labels (Babel node shapes
   });
 });
 
+describe('regression: global-named properties in optional chains', () => {
+  // isGlobalReference skipped the property of a MemberExpression but not of
+  // an OptionalMemberExpression, which is what Babel produces for every link
+  // of an optional chain. `vm.qmp?.close()` (close is a window global, from
+  // jsdom) became `vm.qmp?.eval(...)()`, a TypeError at runtime, which in an
+  // Electron main process surfaced as an uncaught-exception dialog.
+  it.each([
+    ['optional property', 'var o = { Math: 7 }; var r = o?.Math;', 7],
+    ['optional method call', 'var q = { close() { return 2; } }; var r = q?.close();', 2],
+    ['property after an optional link', 'var a = { b: { JSON: 3 } }; var r = a?.b.JSON;', 3],
+    ['optional call on a global-named method', 'var o = { Math() { return 1; } }; var r = o?.Math?.();', 1],
+  ])('leaves the %s alone', (_label, code, expected) => {
+    const out = transform(code);
+    expect(out).not.toContain('eval(');
+    expect(new Function(out + '\nreturn r;')()).toBe(expected);
+  });
+
+  it('still encodes a global used as the object of an optional chain', () => {
+    const out = transform('var r = Math?.max(2, 5);');
+    expect(out).toContain('eval(');
+    expect(new Function(out + '\nreturn r;')()).toBe(5);
+  });
+});
+
 describe('global encoding functional correctness', () => {
   it('eval/replace resolves Math correctly', () => {
     const out = transform('var x = Math.floor(1.7);');
