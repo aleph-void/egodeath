@@ -3,7 +3,9 @@ name: Release
 # Publishes to npm when a GitHub release is published.
 # Auth is npm trusted publishing (OIDC) — no NPM_TOKEN secret. Configure the
 # trusted publisher on npmjs.com: package egodeath → Settings → Trusted
-# Publisher → GitHub Actions, org aleph-void, repo egodeath, workflow release.yml.
+# Publisher → GitHub Actions, org aleph-void, repo egodeath, workflow release.yml,
+# environment main. The config allows staged publish only, so each release
+# waits for approval on npmjs.com before going live.
 
 on:
   release:
@@ -20,6 +22,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Must match the environment in the npm trusted publisher config
+    # (`npm trust list egodeath`), or npm rejects the OIDC token with a 404.
+    environment: main
     permissions:
       contents: read
       id-token: write # OIDC token for npm trusted publishing + provenance
