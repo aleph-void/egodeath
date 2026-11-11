@@ -559,6 +559,17 @@ function mutateNode(node: any, nameMap: Map<string, string>, parent: any = null,
       break;
 
     case 'Identifier':
+      // A class's `constructor` key is what makes the method a constructor:
+      // renamed, it becomes an ordinary method and the `super(...)` inside it
+      // is a SyntaxError ("'super' keyword unexpected here").
+      if (isPropertyKey && clone.name === 'constructor') break;
+      // `new.target` / `import.meta` are syntax, not names.
+      if (parent && parent.type === 'MetaProperty') break;
+      // Private names (`#arr`) are scoped to their class, so keeping them
+      // can't collide. A generated (non-ASCII) private name also trips a
+      // terser printer bug in the final minify: the declaration comes out
+      // quoted, `#"ฒmő"=[]`, which is a SyntaxError.
+      if (parent && parent.type === 'PrivateName') break;
       // Rename non-keyword identifiers to fresh names
       if (clone.name && clone.name !== 'undefined' && clone.name !== 'null' &&
           clone.name !== 'true' && clone.name !== 'false' &&
