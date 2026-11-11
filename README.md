@@ -2,7 +2,7 @@
 
 **This project does not achieve indistinguishability obfuscation. You should not be using this to product to protect secrets.  It exists to deter reverse engineering, not prevent it**
 
-![Tests](https://github.com/nstarke/egodeath/actions/workflows/ci.yml/badge.svg)
+![Tests](https://github.com/aleph-void/egodeath/actions/workflows/ci.yml/badge.svg)
 
 ![images/screenshot.png](images/screenshot.png)
 A JavaScript obfuscator designed to make code extremely difficult to read and analyze for both humans and LLMs. Written in TypeScript. Implements techniques from peer-reviewed cryptographic obfuscation research.

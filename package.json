@@ -9,13 +9,13 @@
     "minify",
     "anti-reverse-engineering"
   ],
-  "homepage": "https://github.com/nstarke/egodeath#readme",
+  "homepage": "https://github.com/aleph-void/egodeath#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nstarke/egodeath.git"
+    "url": "git+https://github.com/aleph-void/egodeath.git"
   },
   "bugs": {
-    "url": "https://github.com/nstarke/egodeath/issues"
+    "url": "https://github.com/aleph-void/egodeath/issues"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
