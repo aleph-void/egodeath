@@ -1,0 +1,64 @@
+name: Release
+
+# Publishes to npm when a GitHub release is published.
+# Auth is npm trusted publishing (OIDC) — no NPM_TOKEN secret. Configure the
+# trusted publisher on npmjs.com: package egodeath → Settings → Trusted
+# Publisher → GitHub Actions, org aleph-void, repo egodeath, workflow release.yml.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing + provenance
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check release tag matches package.json version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::Release tag $TAG does not match package.json version $VERSION"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # prepack clean-builds; prepublishOnly runs typecheck + tests.
+      # Pre-release tags (e.g. v1.1.0-beta.1) publish under the "next" dist-tag.
+      - name: Publish to npm
+        env:
+          # Tests run in prepublishOnly; see ci.yml for the heap-size rationale.
+          NODE_OPTIONS: --max-old-space-size=6144
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            npm publish --access public --tag next
+          else
+            npm publish --access public
+          fi
