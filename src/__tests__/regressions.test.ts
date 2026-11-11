@@ -916,3 +916,116 @@ describe('regression: CommonJS module globals __dirname/__filename survive', () 
     expect(mod.joined).toBe('/real/sub/thing.json');
   });
 });
+
+describe('regression: literal names in method/getter/class keys are never replaced', () => {
+  // stringArrayExtraction skipped string keys only on ObjectProperty, so a
+  // quoted getter/setter/method name was swapped for a decoder call without
+  // making the key computed: `get "~standard"() {}` became
+  // `get _0x(2568)() {}` — a SyntaxError. Real bundles hit this through zod's
+  // Standard Schema getter. numberEncoding had the same gap for numeric
+  // method keys on object literals (`{ get 0() {} }`).
+  //
+  // Run at a low budget (ratio ~2.5, string-array + rename only): at higher
+  // ratios propertyKeyEncoding makes these keys computed first and masks it.
+  const lowBudget = (code: string) => ({ targetTokens: Math.max(20, Math.round((2.5 * code.length) / 4)) });
+
+  it('keeps quoted getter/setter/method keys on object literals working', () => {
+    const code = `
+      const store = { v: 1 };
+      const schema = {
+        get "~standard"() { return { vendor: "zod", version: store.v }; },
+        set "~standard"(x) { store.v = x; },
+        "quoted method"(a) { return "got:" + a; },
+        get 0() { return "zero"; },
+      };
+      schema["~standard"] = 7;
+      module.exports = [schema["~standard"].vendor, schema["~standard"].version,
+        schema["quoted method"]("x"), schema[0]];
+    `;
+    expect(retry(() => runAsCommonJSOnce(code, lowBudget(code)))).toEqual(['zod', 7, 'got:x', 'zero']);
+  });
+
+  it('keeps quoted and numeric class member keys working', () => {
+    const code = `
+      class Box {
+        "inner value" = "field";
+        static "make box"() { return new Box(); }
+        get "the label"() { return "label:" + this["inner value"]; }
+        1() { return "one"; }
+      }
+      const b = Box["make box"]();
+      module.exports = [b["the label"], b[1]()];
+    `;
+    expect(retry(() => runAsCommonJSOnce(code, lowBudget(code)))).toEqual(['label:field', 'one']);
+  });
+});
+
+describe('regression: ES module import/export bindings survive renaming', () => {
+  // Identifier renaming broke most ES module shapes:
+  //  - `export { a }` / `export { a as b }` / `export default a`: the binding
+  //    was renamed but the export still named the original → SyntaxError /
+  //    ReferenceError at link time.
+  //  - `export const c` / `export function f`: the public export name itself
+  //    was renamed, silently changing the module's API.
+  //  - `import * as ns` / `import { "s n" as s }`: the import binding kept
+  //    its name while every use was renamed.
+  //  - Static import/export sources had their *value* overwritten with the
+  //    unicode-escaped text, so `"./dep.mjs"` resolved as `./…`.
+  // Each case runs the original and the obfuscated module in a child Node
+  // process and compares their exports.
+  const { execFileSync } = require('child_process');
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+
+  let dir: string;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egodeath-esm-'));
+    fs.writeFileSync(path.join(dir, 'dep.mjs'),
+      'export const x = 41; export default function d() { return "dflt"; }\n' +
+      'const sn = 5; export { sn as "str name" };\n');
+    // Prints a module's exports as sorted JSON; functions are called, classes
+    // and objects reduced to their type, so behaviour (not identity) is compared.
+    fs.writeFileSync(path.join(dir, 'dump.mjs'),
+      'const m = await import(process.argv[2]);\n' +
+      'const v = (x) => typeof x === "function" ? (/^class\\b/.test(String(x)) ? "class" : x())\n' +
+      '  : (x && typeof x === "object") ? "object" : x;\n' +
+      'console.log(JSON.stringify(Object.keys(m).sort().map((k) => [k, v(m[k])])));\n');
+  });
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const dump = (name: string, code: string): string => {
+    const file = path.join(dir, name + '.mjs');
+    fs.writeFileSync(file, code);
+    return execFileSync(process.execPath, [path.join(dir, 'dump.mjs'), file], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  };
+
+  const cases: Record<string, string> = {
+    'export list shorthand': 'const a = "alpha"; export { a };',
+    'export list alias': 'const a = "alpha"; export { a as b };',
+    'export list string name': 'const a = "alpha"; export { a as "kebab-name" };',
+    'export default identifier': 'const a = "alpha"; export default a;',
+    'export const': 'export const c = "gamma";',
+    'export function': 'export function f() { return "fn"; }',
+    'export class with quoted getter': 'export class K { get "~standard"() { return "std"; } }\nexport const k = new K()["~standard"];',
+    'export destructuring': 'const o = { p: 1, q: [2, 3] }; export const { p, q: [r, ...rest] } = o;',
+    'export let + mutation': 'export let counter = 1; export function bump() { counter++; return counter; }',
+    'named/default/namespace imports': 'import dflt, { x as someLongBinding } from "./dep.mjs";\nimport * as namespaceObj from "./dep.mjs";\nexport const total = someLongBinding + namespaceObj.x + dflt().length;',
+    'string-named import': 'import { "str name" as stringNamed } from "./dep.mjs"; export const y = stringNamed;',
+    're-exports': 'export { x } from "./dep.mjs"; export * as everything from "./dep.mjs";',
+  };
+
+  for (const [name, code] of Object.entries(cases)) {
+    it(name, () => {
+      const slug = name.replace(/\W+/g, '-');
+      const expected = dump(slug + '.orig', code);
+      for (const ratio of [2.5, 6]) {
+        const targetTokens = Math.max(20, Math.round((ratio * code.length) / 4));
+        const got = retry(() => dump(slug + '.obf' + ratio, obfuscate(code, { targetTokens, stubConsole: false })));
+        expect(got).toBe(expected);
+      }
+    });
+  }
+});

@@ -65,6 +65,18 @@ function unicodeEscape(value: string): string {
 }
 
 /**
+ * Make a string literal print as unicode escapes without changing its value.
+ * Printers emit `raw` / `extra.raw` verbatim when present; `value` (and
+ * `extra.rawValue`) stay the real string so anything that re-prints from the
+ * value still produces the correct specifier.
+ */
+function setEscapedRaw(node: any): void {
+  const raw = '"' + unicodeEscape(node.value) + '"';
+  if (node.raw !== undefined || node.type === 'Literal') node.raw = raw;
+  node.extra = { ...(node.extra || {}), rawValue: node.value, raw };
+}
+
+/**
  * Check if the parent is a dynamic import() call.
  */
 function isDynamicImport(parent: any): boolean {
@@ -260,13 +272,11 @@ export const secondPassHandlers: PassHandlerMap = {
       node.value &&
       isImportSource(parent)
     ) {
-      // Static import/export — must stay a string literal, so use unicode escapes
-      node.value = unicodeEscape(node.value);
-      if (node.raw) node.raw = '"' + unicodeEscape(node.value) + '"';
-      if (node.extra) {
-        node.extra.rawValue = node.value;
-        node.extra.raw = '"' + node.value + '"';
-      }
+      // Static import/export — must stay a string literal, so escape it in
+      // the printed source only. `value` must remain the real specifier:
+      // overwriting it with the escaped text made printers re-escape the
+      // backslashes, so `"./dep.mjs"` resolved as the literal `\u002e…`.
+      setEscapedRaw(node);
       return node;
     }
     // String hiding is handled by string array extraction (post-transform)
@@ -426,9 +436,46 @@ export const secondPassHandlers: PassHandlerMap = {
   },
 
   // Import/export — don't touch module specifier strings
-  ImportDeclaration(node) { return node; },
+  ImportDeclaration(node) {
+    // Import bindings (`import d, { a as b, "s n" as c } from 'm'`,
+    // `import * as ns from 'm'`) are local bindings declared by scope
+    // analysis, so their `local` must follow the rename that every reference
+    // in the module gets. `imported` is the other module's export name and
+    // must not change. The source string is handled by the literal visitor.
+    for (const spec of node.specifiers || []) {
+      if (!spec || !spec.local || spec.local.type !== 'Identifier') continue;
+      // `import { a }` may share one Identifier between `imported` and
+      // `local`; split them so renaming `local` keeps the export name.
+      if (spec.type === 'ImportSpecifier' && spec.imported === spec.local) {
+        spec.imported = { type: 'Identifier', name: spec.local.name };
+      }
+      substitute(spec.local);
+    }
+    return node;
+  },
   ExportNamedDeclaration(node) { return node; },
-  ExportDefaultDeclaration(node) { return node; },
+  ExportDefaultDeclaration(node) {
+    // `export default a;` — the declaration is a bare reference to a local
+    // binding. Nothing else visits it, so without this the binding is
+    // renamed while the export still names the original.
+    if (node.declaration && node.declaration.type === 'Identifier') substitute(node.declaration);
+    return node;
+  },
+  ExportSpecifier(node, parent) {
+    // `export { a }` / `export { a as b }` — `local` references a local
+    // binding and must follow its rename; `exported` is the public name and
+    // must not change. Re-exports (`export { a } from 'm'`) name the other
+    // module's export, so leave them alone.
+    if (parent && parent.source) return node;
+    if (!node.local || node.local.type !== 'Identifier') return node;
+    // Some parsers share one Identifier between `local` and `exported` for
+    // `export { a }`; split them so renaming `local` keeps the public name.
+    if (node.exported === node.local) {
+      node.exported = { type: 'Identifier', name: node.local.name };
+    }
+    substitute(node.local);
+    return node;
+  },
   ExportAllDeclaration(node) { return node; },
 
   TryStatement(node) { return node; },
@@ -482,12 +529,8 @@ export const secondPassHandlers: PassHandlerMap = {
       node.value &&
       isImportSource(parent)
     ) {
-      // Static import/export — use unicode escapes in the string literal
-      node.value = unicodeEscape(node.value);
-      if (node.extra) {
-        node.extra.rawValue = node.value;
-        node.extra.raw = '"' + node.value + '"';
-      }
+      // Static import/export — escape in the printed source only (see above).
+      setEscapedRaw(node);
       return node;
     }
     // String hiding is handled by string array extraction (post-transform)

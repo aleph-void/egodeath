@@ -1,5 +1,6 @@
 import { randInt, shuffle } from '../transformHelpers';
 import { VISITOR_KEYS } from '../visitorKeys';
+import { isLiteralNamePosition } from '../ast';
 import * as estraverse from 'estraverse';
 import * as recast from 'recast';
 import { gen } from '../random';
@@ -126,9 +127,14 @@ function isImportExportSource(parent: any): boolean {
 }
 
 function isPropertyKey(node: any, parent: any): boolean {
+  // Object keys stay excluded even when computed (`{ ["k"]: v }`), as before;
+  // every other literal-name slot (method/getter/setter/class-member keys,
+  // string module-export names) must keep its literal or the output is a
+  // SyntaxError, e.g. `get "~standard"() {}` -> `get _0x(12)() {}`.
   if (parent.type === 'Property' || parent.type === 'ObjectProperty') {
     return parent.key === node;
   }
+  if (isLiteralNamePosition(node, parent)) return true;
   if (parent.type === 'MemberExpression') {
     return parent.property === node && !parent.computed;
   }

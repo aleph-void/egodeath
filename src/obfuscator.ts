@@ -13,6 +13,7 @@ import { resetCapturedGlobals, flushCapturedGlobals } from './capturedGlobals';
 import { buildConsoleKeywords } from './keywords';
 import { firstPassHandlers } from './passes/firstPass';
 import { secondPassHandlers } from './passes/secondPass';
+import { splitExportDeclarations } from './transforms/splitExportDeclarations';
 import { thirdPassHandlers } from './passes/thirdPass';
 import { analyzeScopes, setScopeAnalysis, resetScopeAnalysis } from './scopeAnalysis';
 import { applyClosedObjectRename } from './transforms/closedObjectRename';
@@ -80,6 +81,11 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   const ast = recast.parse(code, {
     parser: require('recast/parsers/babel'),
   });
+
+  // `export const c = …` → `const c = …; export { c }`, so renaming the
+  // binding can't change the module's public export name. Runs first so
+  // every later transform sees plain declarations plus an export list.
+  splitExportDeclarations(ast.program);
 
   // There is no user code to hide in an empty program. Running the full
   // default-budget pipeline would instead obfuscate its own injected helpers,
