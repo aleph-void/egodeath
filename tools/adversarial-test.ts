@@ -21,8 +21,11 @@
  *
  * Output goes to the gitignored .adversarial/ directory.
  *
- * NOTE: webcrack depends on isolated-vm, whose native addon only builds
- * against Node >= 22. Run this tool under Node 22+ (e.g. `nvm use 22`).
+ * webcrack is NOT a project dependency: its `engines` field caps Node at <25,
+ * which `engine-strict=true` would turn into an install failure on Node 26.
+ * The webcrack stages run only when a webcrack binary is available, either via
+ * the WEBCRACK_BIN environment variable or as `webcrack` on PATH (e.g.
+ * `npm i -g webcrack`). Otherwise they are skipped and only terser runs.
  *
  * Usage:
  *   npm run adversarial-test                 # default: scan dist/obfuscated
@@ -31,16 +34,24 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 
 // terser is already a project dependency; use its sync API like the obfuscator.
 const { minify_sync } = require('terser');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const WEBCRACK_BIN = path.join(PROJECT_ROOT, 'node_modules', '.bin', 'webcrack');
+const WEBCRACK_BIN = process.env.WEBCRACK_BIN || 'webcrack';
+
+/** True if the webcrack CLI can be launched. */
+function webcrackAvailable(): boolean {
+  const probe = spawnSync(WEBCRACK_BIN, ['--version'], { stdio: 'ignore', timeout: 30000 });
+  return !probe.error && probe.status === 0;
+}
 
 interface StageResult {
   ran: boolean;
+  /** stage was intentionally not run (tool unavailable) */
+  skipped?: boolean;
   size: number;
   /** size as a fraction of the original obfuscated size */
   ratio: number;
@@ -104,16 +115,11 @@ function runTerser(code: string): { code: string } {
 }
 
 /**
- * Run webcrack on a file via its CLI, using the *current* node binary so the
- * isolated-vm native addon (built for this ABI) loads correctly. Returns the
- * deobfuscated source.
+ * Run webcrack on a file via its CLI. Returns the deobfuscated source.
  */
 function runWebcrack(inputFile: string, scratchDir: string): string {
-  if (!fs.existsSync(WEBCRACK_BIN)) {
-    throw new Error('webcrack is not installed (npm i -D webcrack under Node 22+)');
-  }
   fs.rmSync(scratchDir, { recursive: true, force: true });
-  execFileSync(process.execPath, [WEBCRACK_BIN, inputFile, '-o', scratchDir, '-f'], {
+  execFileSync(WEBCRACK_BIN, [inputFile, '-o', scratchDir, '-f'], {
     stdio: 'pipe',
     timeout: 180000,
     cwd: PROJECT_ROOT,
@@ -130,7 +136,7 @@ function runWebcrack(inputFile: string, scratchDir: string): string {
     .join('\n\n');
 }
 
-function processFile(inputFile: string, outDir: string): AdversarialReport {
+function processFile(inputFile: string, outDir: string, useWebcrack: boolean): AdversarialReport {
   const original = fs.readFileSync(inputFile, 'utf-8');
   const originalSize = Buffer.byteLength(original);
 
@@ -173,6 +179,12 @@ function processFile(inputFile: string, outDir: string): AdversarialReport {
     console.log(`  ✗ terser:          ${report.terser.error}`);
   }
 
+  if (!useWebcrack) {
+    report.webcrack.skipped = true;
+    report.terserThenWebcrack.skipped = true;
+    return report;
+  }
+
   // Stage 2: webcrack only
   try {
     const wc = runWebcrack(inputFile, scratch);
@@ -212,15 +224,6 @@ function extractError(e: any): string {
 }
 
 function main() {
-  const major = parseInt(process.versions.node.split('.')[0], 10);
-  if (major < 22) {
-    console.error(
-      `This tool needs Node >= 22 (webcrack's isolated-vm addon won't load on ${process.version}).\n` +
-      `Run: nvm use 22 && npm run adversarial-test`
-    );
-    process.exit(1);
-  }
-
   const args = process.argv.slice(2);
   const inputArgs = args.length > 0 ? args : [path.join(PROJECT_ROOT, 'dist', 'obfuscated')];
   const outDir = path.join(PROJECT_ROOT, '.adversarial');
@@ -236,9 +239,17 @@ function main() {
   console.log(`Adversarial deobfuscation of ${inputs.length} file(s)`);
   console.log(`Output: ${outDir}`);
 
+  const useWebcrack = webcrackAvailable();
+  if (!useWebcrack) {
+    console.log(
+      `webcrack not found (${WEBCRACK_BIN}); skipping webcrack stages.\n` +
+      `Install it globally (npm i -g webcrack) or set WEBCRACK_BIN to enable them.`
+    );
+  }
+
   const reports: AdversarialReport[] = [];
   for (const input of inputs) {
-    reports.push(processFile(input, outDir));
+    reports.push(processFile(input, outDir, useWebcrack));
   }
 
   // Summary: higher ratio = more resistant (deobfuscators couldn't shrink it).
@@ -247,7 +258,7 @@ function main() {
   console.log('  ----                                     ----     ------   --------  -------');
   for (const r of reports) {
     const fmt = (s: StageResult) =>
-      s.ran ? `${(s.ratio * 100).toFixed(0)}%`.padEnd(8) : 'FAIL'.padEnd(8);
+      (s.ran ? `${(s.ratio * 100).toFixed(0)}%` : s.skipped ? 'skip' : 'FAIL').padEnd(8);
     console.log(
       `  ${r.name.slice(-40).padEnd(40)} ` +
       `${(r.originalSize / 1024).toFixed(0)}KB`.padEnd(8) + ' ' +

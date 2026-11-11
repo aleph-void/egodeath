@@ -833,6 +833,55 @@ describe('regression: tripwire hash setups do not coerce object params', () => {
   });
 });
 
+describe('regression: minify handles module syntax; fallback never fuses tokens', () => {
+  // Terser's minify was called in script mode only, so it threw on
+  // module-only syntax (top-level `await`, `import`/`export`, `import.meta`)
+  // and fell through to a regex whitespace strip. That strip joined lines with
+  // nothing, so a non-block `else` on its own line fused with the next
+  // statement: `else\nreturn x` became `elsereturn x` — a SyntaxError that
+  // only surfaced on real module bundles (e.g. a dep probing WebCodecs via
+  // top-level await). Terser now retries in module mode first, and the
+  // fallback collapses whitespace to a single space so tokens stay separated.
+  const babelParse = (code: string): void => {
+    require('@babel/parser').parse(code, {
+      sourceType: 'module',
+      allowAwaitOutsideFunction: true,
+    });
+  };
+
+  it('obfuscates a module with top-level await + non-block else/return into parseable output', () => {
+    const code = `
+      const ready = await Promise.resolve('ok');
+      function pick(source, key) {
+        if (source && key) return source[key];
+        else return fallback(source);
+      }
+      function fallback(x) { return x; }
+      export const result = pick({ a: ready }, 'a');
+    `;
+    const out = retry(() => {
+      const o = obfuscate(code, { targetTokens: 2000 });
+      babelParse(o); // throws on the `elsereturn` fusion
+      return o;
+    });
+    expect(out).not.toMatch(/\belse[A-Za-z]/); // no `else` fused to a keyword/identifier
+    expect(out).toMatch(/await/); // top-level await preserved, not stripped
+  });
+
+  it('keeps import.meta / export modules parseable', () => {
+    const code = `
+      const where = import.meta.url;
+      export function at() { return where; }
+    `;
+    const out = retry(() => {
+      const o = obfuscate(code, { targetTokens: 2000 });
+      babelParse(o);
+      return o;
+    });
+    expect(typeof out).toBe('string');
+  });
+});
+
 describe('regression: CommonJS module globals __dirname/__filename survive', () => {
   // `__dirname` and `__filename` are the last two parameters of Node's
   // CommonJS module wrapper `(exports, require, module, __filename,
