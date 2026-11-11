@@ -1,6 +1,7 @@
 import { pick, shuffle } from '../transformHelpers';
 import { VISITOR_KEYS as EXTRA_VISITOR_KEYS } from '../visitorKeys';
 import * as crypto from 'crypto';
+import { gen } from '../random';
 import * as estraverse from 'estraverse';
 import { generateDeadCode, collectScopeVars } from './deadCodeInjection';
 
@@ -269,7 +270,7 @@ function buildCases(
       });
 
       // Consequent case
-      const consBody = statementsOf(stmt.consequent);
+      const consBody = [stmt.consequent];
       cases.push({
         stateId: consequentState,
         body: [...consBody, assignState(stateVar, nextState), breakStatement()],
@@ -277,9 +278,7 @@ function buildCases(
 
       // Alternate case (if exists)
       if (stmt.alternate) {
-        const altBody = stmt.alternate.type === 'IfStatement'
-          ? [stmt.alternate]  // else-if: keep as-is inside the case
-          : statementsOf(stmt.alternate);
+        const altBody = [stmt.alternate];
         cases.push({
           stateId: alternateState,
           body: [...altBody, assignState(stateVar, nextState), breakStatement()],
@@ -302,16 +301,6 @@ function buildCases(
   });
 
   return { cases, entryState, exitState };
-}
-
-/**
- * Extract the body statements from a node that might be
- * a BlockStatement or a single statement.
- */
-function statementsOf(node: any): any[] {
-  if (!node) return [];
-  if (node.type === 'BlockStatement') return node.body;
-  return [node];
 }
 
 /**
@@ -390,7 +379,9 @@ function buildStateMachine(
  * Flatten the body of a single function.
  * Returns the new body statements (hoisted vars + state var + while/switch).
  */
-export function flattenFunctionBody(body: any[], deadCodeMul: number = 1): any[] | null {
+export function flattenFunctionBody(
+  body: any[], deadCodeMul: number = 1, reservedNames: Set<string> = new Set(),
+): any[] | null {
   if (body.length < MIN_STATEMENTS) return null;
   if (body.length > MAX_STATEMENTS) return null;
 
@@ -415,7 +406,12 @@ export function flattenFunctionBody(body: any[], deadCodeMul: number = 1): any[]
     }
   }
 
-  const stateVar = '_s';
+  // Reserve references as well as declarations: a new local must not shadow
+  // a free reference or a variable captured by a nested function.
+  collectIdentifierNames({ type: 'Program', body }, reservedNames);
+  let stateVar = gen();
+  while (reservedNames.has(stateVar)) stateVar = gen();
+  reservedNames.add(stateVar);
 
   // Hoist variable declarations
   const { hoisted, transformed } = hoistDeclarations(body);
@@ -470,12 +466,24 @@ export function flattenFunctionBody(body: any[], deadCodeMul: number = 1): any[]
   return [...hoisted, stateVarDecl, machine];
 }
 
+function collectIdentifierNames(root: any, names: Set<string>): void {
+  estraverse.traverse(root, {
+    keys: EXTRA_VISITOR_KEYS,
+    enter(node: any) {
+      if (node.type === 'Identifier') names.add(node.name);
+    },
+    fallback: 'iteration',
+  } as any);
+}
+
 /**
  * Apply control flow flattening to all function bodies in an AST.
  * Modifies the AST in-place.
  */
 export function applyControlFlowFlattening(ast: any, budget?: any): void {
   const deadCodeMul = budget ? budget.deadCodeMultiplier : 1;
+  const reservedNames = new Set<string>();
+  collectIdentifierNames(ast.program, reservedNames);
 
   estraverse.traverse(ast.program, {
     keys: EXTRA_VISITOR_KEYS,
@@ -487,7 +495,7 @@ export function applyControlFlowFlattening(ast: any, budget?: any): void {
         node.type === 'ObjectMethod';
 
       if (isFn && node.body && node.body.type === 'BlockStatement') {
-        const flattened = flattenFunctionBody(node.body.body, deadCodeMul);
+        const flattened = flattenFunctionBody(node.body.body, deadCodeMul, reservedNames);
         if (flattened) {
           node.body.body = flattened;
         }

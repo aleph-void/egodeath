@@ -24,15 +24,15 @@ describe('applyTemplateLiteralFlattening — AST-level rewrites', () => {
     const out = printAfterFlatten('const s = `hi ${name}!`;');
     expect(out).toContain('"hi "');
     expect(out).toContain('"!"');
-    expect(out).toContain('+ name');
-    expect(out.includes('`')).toBe(false);
+    expect(out).toContain('`${name}`');
+    expect(out).toContain('${');
   });
 
   it('rewrites a template that starts with an interpolation', () => {
     // Anchor is an empty string so `${1}${2}` yields "12" not 3.
     const out = printAfterFlatten('const s = `${a}${b}`;');
     expect(out).toContain('""');
-    expect(out.includes('`')).toBe(false);
+    expect(out).toContain('${');
   });
 
   it('does not flatten the quasi of a tagged template', () => {
@@ -54,12 +54,13 @@ describe('applyTemplateLiteralFlattening — AST-level rewrites', () => {
     const out = printAfterFlatten('const s = `n=${obj.prop + 1}`;');
     expect(out).toContain('"n="');
     expect(out).toContain('obj.prop + 1');
-    expect(out.includes('`')).toBe(false);
+    expect(out).toContain('${');
   });
 
   it('leaves no empty-segment StringLiteral between adjacent interpolations', () => {
     const out = printAfterFlatten('const s = `${a}${b}${c}`;');
-    // Should be along the lines of "" + a + b + c — no extra "" between a and b.
+    // Only the concatenation anchor is an empty StringLiteral; each value
+    // keeps its own minimal template for native ToString semantics.
     // Count of "" literals should be exactly one (the anchor).
     const emptyMatches = out.match(/""/g) || [];
     expect(emptyMatches.length).toBe(1);

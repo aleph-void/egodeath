@@ -2,54 +2,11 @@ import { VISITOR_KEYS as EXTRA_VISITOR_KEYS } from '../visitorKeys';
 import * as estraverse from 'estraverse';
 
 /**
- * Template literal flattening.
- *
- * String array extraction only sees StringLiteral/Literal nodes — the
- * static text inside a template literal lives on TemplateElement nodes
- * and slips through every string-hiding pass unchanged. That means
- *
- *     `fetching ${url}, retrying...`
- *
- * leaves "fetching " and ", retrying..." visible verbatim in the
- * output, which is the same kind of information leak the string array
- * is supposed to stop.
- *
- * This pass converts every plain TemplateLiteral into an equivalent
- * chain of `+` concatenations whose static parts are ordinary
- * StringLiterals:
- *
- *     `fetching ${url}, retrying...`
- *   →
- *     "fetching " + url + ", retrying..."
- *
- * Those StringLiterals are then picked up by stringArrayExtraction
- * just like any other literal in the source.
- *
- * Edge cases handled:
- *
- *   - Pure template (no interpolation) — e.g. `const x = \`abc\``.
- *     Collapses to a single StringLiteral("abc").
- *
- *   - Template with only interpolations, e.g. `${a}${b}`. We start the
- *     chain with an empty StringLiteral ("") so the leftmost `+` is
- *     string-concat and `${1}${2}` correctly produces "12" and not 3.
- *
- *   - Empty quasi segments between interpolations (`${a}${b}`) — we
- *     omit the empty StringLiteral to avoid `+ "" +` clutter in the
- *     output, but the leading `""` anchor always stays put.
- *
- *   - Tagged templates (``tag`foo${x}`bar``) — the tag function
- *     receives the quasi array verbatim (with both raw and cooked
- *     properties plus the spec-mandated `.raw`). Flattening the
- *     quasi would change what the tag sees, so we leave the
- *     quasi of a TaggedTemplateExpression alone. Nested plain
- *     templates inside the tag's interpolated expressions are still
- *     flattened normally.
- *
- * Runs as a late post-transform so the expressions inside the
- * template (already identifier-renamed by secondPass, possibly
- * already wrapped by globalVariableEncoding / propertyKeyEncoding)
- * are carried across unchanged — we only rearrange the shell.
+ * Move static template text into StringLiterals for string-array extraction.
+ * Keep each interpolation in a minimal `${expression}` template so the engine
+ * performs ToString with the string hint, preserves Symbol errors, and coerces
+ * each value before evaluating the next interpolation. Neither `+ value` nor
+ * `String(value)` has identical semantics. Tagged templates stay untouched.
  */
 
 /** Build a babel-shape StringLiteral for the given cooked value. */
@@ -81,7 +38,14 @@ function flattenTemplateLiteral(tl: any): any {
   let acc: any = stringLit(cookedOf(quasis[0]));
 
   for (let i = 0; i < expressions.length; i++) {
-    acc = { type: 'BinaryExpression', operator: '+', left: acc, right: expressions[i] };
+    const interpolation = {
+      type: 'TemplateLiteral',
+      quasis: [false, true].map(tail => ({
+        type: 'TemplateElement', value: { raw: '', cooked: '' }, tail,
+      })),
+      expressions: [expressions[i]],
+    };
+    acc = { type: 'BinaryExpression', operator: '+', left: acc, right: interpolation };
     const q = quasis[i + 1];
     const qv = cookedOf(q);
     if (qv.length > 0) {

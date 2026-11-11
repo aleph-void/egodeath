@@ -52,6 +52,14 @@ function runPass(ast: any, handlers: PassHandlerMap): void {
   } as any);
 }
 
+function splitShebang(code: string): { shebang: string; source: string } {
+  if (!code.startsWith('#!')) return { shebang: '', source: code };
+  const newline = code.indexOf('\n');
+  return newline < 0
+    ? { shebang: code + '\n', source: '' }
+    : { shebang: code.slice(0, newline + 1), source: code.slice(newline + 1) };
+}
+
 /**
  * Obfuscate JavaScript source code.
  *
@@ -70,13 +78,9 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   resetCapturedGlobals();
   resetScopeAnalysis();
 
-  // Strip shebang line if present — parsers can't handle it
-  let shebang = '';
-  if (code.startsWith('#!')) {
-    const newlineIdx = code.indexOf('\n');
-    shebang = code.slice(0, newlineIdx + 1);
-    code = code.slice(newlineIdx + 1);
-  }
+  const input = splitShebang(code);
+  const shebang = input.shebang;
+  code = input.source;
 
   const ast = recast.parse(code, {
     parser: require('./babelParser'),
@@ -225,7 +229,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   }
 
   // Template literal flattening: rewrite `foo ${x} bar` into
-  // "foo " + x + " bar" so the quasi strings land as plain
+  // "foo " + `${x}` + " bar" so the quasi strings land as plain
   // StringLiterals that the next pass can pack into the string
   // array. Without this, template literals' static text survives
   // verbatim through every obfuscation layer. Must run before
@@ -277,7 +281,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // get reprinted with no semicolon, so wrapping the next statement in
   // `(…)` via contextExhaustion turns two statements into a call
   // (`f()(…)`) and silently changes semantics. Force fresh formatting.
-  estraverse.traverse(ast.program, {
+  estraverse.replace(ast.program, {
     keys: EXTRA_VISITOR_KEYS,
     enter(node: any) {
       // Some of these are non-configurable on recast Node instances, so
@@ -289,24 +293,30 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
       try { delete node.range; } catch { node.range = undefined; }
       try { delete node.original; } catch { node.original = undefined; }
     },
+    leave(node: any) {
+      // Negative numbers are unary expressions in JavaScript syntax. A signed
+      // NumericLiteral inside another minus can otherwise print as `--1`.
+      if ((node.type === 'NumericLiteral' || node.type === 'Literal') &&
+          typeof node.value === 'number' && (node.value < 0 || Object.is(node.value, -0))) {
+        return {
+          type: 'UnaryExpression', operator: '-', prefix: true,
+          argument: { type: 'NumericLiteral', value: -node.value },
+        };
+      }
+      // Recast also prints nested unary minuses as a decrement token even
+      // with a valid AST. Explicit parentheses keep the tokens distinct.
+      if (node.type === 'UnaryExpression' && (node.operator === '-' || node.operator === '+') &&
+          node.argument.type === 'UnaryExpression' && node.argument.operator === node.operator) {
+        node.argument = { type: 'ParenthesizedExpression', expression: node.argument };
+      }
+    },
     fallback: 'iteration',
   } as any);
 
   let output = shebang + recast.print(ast).code;
 
-  // Normalize CRLF → LF so terser and regex fallback work on all platforms
+  // Normalize line endings before minification.
   output = output.replace(/\r\n?/g, '\n');
-
-  // Safety net: recast prints `UnaryExpression(-, NumericLiteral(-n))` as
-  // "--n" with no separator — the two `-` glyphs collide into the decrement
-  // token, which is only valid on an lvalue and raises "Invalid left-hand
-  // side expression in prefix operation" on load. Transforms try to avoid
-  // emitting that structure, but rare construction paths still sneak it
-  // through. Normalize by inserting a space between `--` and a following
-  // digit so the two unary minuses stay separate tokens. `--ident` (prefix
-  // decrement on a variable) is untouched because the regex anchors on a
-  // trailing digit.
-  output = output.replace(/--(\d)/g, '- -$1');
 
   // Final pass: minify to strip whitespace and formatting
   // Uses terser with no mangling (no variable renaming) and minimal
@@ -332,27 +342,15 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // Script mode first; then module mode, which parses module-only syntax the
   // script parser rejects — top-level `await` (e.g. a bundled dep probing
   // WebCodecs), `import`/`export`, `import.meta`. Without this, such bundles
-  // always fell through to the regex fallback below.
+  // could not be minified in script mode.
   const minified = tryTerser({}) ?? tryTerser({ module: true });
   if (minified !== null) {
     output = minified;
   } else {
-    // Last-resort strip for output neither terser mode can parse. It must not
-    // fuse adjacent tokens: joining lines with nothing turned `else\nreturn`
-    // into `elsereturn` (a SyntaxError). Collapse every whitespace run —
-    // newlines included — to a single space, which always separates tokens.
-    output = output
-      .replace(/\/\/[^\n]*/g, '') // strip line comments
-      .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
-      .replace(/\s+/g, ' ') // collapse all whitespace to a single space
-      .trim();
+    // Never edit JavaScript with regexes: strings, templates, regex literals,
+    // and ASI all make text-based comment/whitespace stripping unsafe.
+    throw new Error('Unable to minify obfuscated JavaScript in script or module mode');
   }
-
-  // Re-apply the `--digit` safety net after minification/fallback — both
-  // paths can re-collapse whitespace in ways that could resurface the
-  // decrement-on-literal token (e.g., a `-\n-1` sequence becoming `--1`
-  // when newlines are stripped in the fallback path).
-  output = output.replace(/--(\d)/g, '- -$1');
 
   return output;
 }
@@ -725,10 +723,17 @@ export function obfuscateMultiple(
         // sibling code that never executes and shouldn't carry the
         // current file's export surface; only the file's own body
         // needs its exports rewritten.
+        const { shebang, source } = splitShebang(file.code);
         const ownCode = dispatchPlan
-          ? normalizeFileExports(file.code, dispatchPlan, pickSlotForFile(dispatchPlan, i))
-          : file.code;
-        const merged = prelude + ownCode;
+          ? normalizeFileExports(source, dispatchPlan, pickSlotForFile(dispatchPlan, i))
+          : source;
+        // Merge statements, not source prefixes: Babel stores directives and
+        // the interpreter separately. Keep the shebang outside recast, which
+        // can otherwise print it after directives when the body changes.
+        const mergedAst = recast.parse(ownCode, { parser: require('./babelParser') });
+        const preludeAst = recast.parse(prelude, { parser: require('./babelParser') });
+        mergedAst.program.body.unshift(...preludeAst.program.body);
+        const merged = shebang + recast.print(mergedAst).code;
         return {
           filename: file.filename,
           code: obfuscate(merged, options),
@@ -820,7 +825,7 @@ function normalizeStringArrays(
   for (const r of results) {
     let ast: any;
     try {
-      ast = recast.parse(r.code, { parser: require('./babelParser') });
+      ast = recast.parse(splitShebang(r.code).source, { parser: require('./babelParser') });
     } catch {
       states.push({ filename: r.filename, ast: null, arrayExpr: null, currentLen: 0 });
       continue;
@@ -864,7 +869,7 @@ function normalizeStringArrays(
       st.arrayExpr.elements.push({ type: 'StringLiteral', value: hex });
     }
 
-    out.push({ filename: st.filename, code: recast.print(st.ast).code });
+    out.push({ filename: st.filename, code: splitShebang(orig.code).shebang + recast.print(st.ast).code });
   }
   return out;
 }
