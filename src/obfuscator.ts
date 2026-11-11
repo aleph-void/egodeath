@@ -304,29 +304,40 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // Uses terser with no mangling (no variable renaming) and minimal
   // compression (no dead code elimination) to preserve all obfuscation
   // while removing readable formatting.
-  try {
-    const result = minify_sync(output, {
-      mangle: false,         // never rename variables
-      compress: false,       // no AST-level compression (would undo obfuscation)
-      format: {
-        beautify: false,     // collapse whitespace
-        comments: false,     // strip any remaining comments
-        semicolons: true,    // use semicolons (not ASI)
-      },
-    });
-    if (result && result.code) {
-      output = result.code;
+  const terserOpts = {
+    mangle: false, // never rename variables
+    compress: false, // no AST-level compression (would undo obfuscation)
+    format: {
+      beautify: false, // collapse whitespace
+      comments: false, // strip any remaining comments
+      semicolons: true, // use semicolons (not ASI)
+    },
+  };
+  const tryTerser = (extra: Record<string, unknown>): string | null => {
+    try {
+      const result = minify_sync(output, { ...terserOpts, ...extra });
+      return result && result.code ? result.code : null;
+    } catch {
+      return null;
     }
-  } catch {
-    // Terser can't parse some obfuscated constructs — fall back to
-    // regex-based whitespace stripping that doesn't require parsing
+  };
+  // Script mode first; then module mode, which parses module-only syntax the
+  // script parser rejects — top-level `await` (e.g. a bundled dep probing
+  // WebCodecs), `import`/`export`, `import.meta`. Without this, such bundles
+  // always fell through to the regex fallback below.
+  const minified = tryTerser({}) ?? tryTerser({ module: true });
+  if (minified !== null) {
+    output = minified;
+  } else {
+    // Last-resort strip for output neither terser mode can parse. It must not
+    // fuse adjacent tokens: joining lines with nothing turned `else\nreturn`
+    // into `elsereturn` (a SyntaxError). Collapse every whitespace run —
+    // newlines included — to a single space, which always separates tokens.
     output = output
-      .replace(/\/\/[^\n]*/g, '')           // strip line comments
-      .replace(/\/\*[\s\S]*?\*\//g, '')     // strip block comments
-      .replace(/^\s+/gm, '')               // strip leading whitespace
-      .replace(/\s*\n\s*/g, '\n')          // collapse blank lines
-      .replace(/\n+/g, '')                 // join all lines
-      .replace(/\s{2,}/g, ' ');            // collapse multiple spaces
+      .replace(/\/\/[^\n]*/g, '') // strip line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
+      .replace(/\s+/g, ' ') // collapse all whitespace to a single space
+      .trim();
   }
 
   // Re-apply the `--digit` safety net after minification/fallback — both
