@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- egodeath mark: a pair of braces around an empty set, in white on the Aleph Void violet tile. -->
+<rect x="12" y="12" width="232" height="232" rx="52" fill="#6d28d9"/>
+<g fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+<path d="M84 64 C64 64 64 76 64 92 L64 112 C64 122 58 128 48 128 C58 128 64 134 64 144 L64 164 C64 180 64 192 84 192"/>
+<path d="M172 64 C192 64 192 76 192 92 L192 112 C192 122 198 128 208 128 C198 128 192 134 192 144 L192 164 C192 180 192 192 172 192"/>
+<circle cx="128" cy="128" r="30"/>
+<path d="M104 160 L152 96"/>
+</g>
+</svg>
