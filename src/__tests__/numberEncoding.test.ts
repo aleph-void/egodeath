@@ -176,15 +176,19 @@ describe('number encoding correctness', () => {
 
 describe('full pipeline with number encoding', () => {
   it('no plain numeric literals in obfuscated output (except 0 and 1)', () => {
-    const code = 'var x = 42; var y = 100; var z = 255;';
+    // Use values above 500. Transforms that run after number encoding emit
+    // their own plain literals: the string-array decoder seeds `prevKey` with
+    // randInt(1, 255) and offsets indices by randInt(50, 500). Small values
+    // like 42/100/255 collided with those about 2% of the time.
+    const code = 'var x = 31337; var y = 54321; var z = 99991;';
     const out = obfuscate(code, { targetTokens: 10000 });
-    // The specific numbers 42, 100, 255 should not appear as plain literals
+    // The specific numbers should not appear as plain literals
     // (they'll be encoded as expressions)
-    // Note: they might appear as parts of encoding expressions (e.g., 42 ^ key)
+    // Note: they might appear as parts of encoding expressions (e.g., 31337 ^ key)
     // but not as standalone assignments
-    expect(out).not.toMatch(/=\s*42\s*;/);
-    expect(out).not.toMatch(/=\s*100\s*;/);
-    expect(out).not.toMatch(/=\s*255\s*;/);
+    expect(out).not.toMatch(/=\s*31337\s*;/);
+    expect(out).not.toMatch(/=\s*54321\s*;/);
+    expect(out).not.toMatch(/=\s*99991\s*;/);
   });
 });
 
