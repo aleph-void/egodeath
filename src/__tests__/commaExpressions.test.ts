@@ -29,6 +29,12 @@ describe('applyCommaExpressions', () => {
     expect(out).toContain('return a = 1, b = 2, c;');
   });
 
+  it('preserves bare returns and preceding side effects', () => {
+    const code = 'var log=[]; function f(){log.push(42); return;} var result=f();';
+    const out = transform(code);
+    expect(new Function(out + 'return [result, log];')()).toEqual([undefined, [42]]);
+  });
+
   it('absorbs throw into comma expression', () => {
     const out = transform('function f() { a = 1; b = 2; throw err; }');
     // recast may parenthesize the sequence expression
@@ -81,9 +87,8 @@ describe('applyCommaExpressions', () => {
 
   it('handles return without argument after expressions', () => {
     const out = transform('function f() { a = 1; b = 2; return; }');
-    // Return with no argument absorbs the preceding expressions
-    // and returns the last expression's value (which is discarded)
-    expect(out).toContain('return a = 1, b = 2;');
+    // Return with no argument absorbs side effects but returns undefined.
+    expect(out).toContain('return a = 1, b = 2, void 0;');
   });
 
   it('handles empty blocks', () => {

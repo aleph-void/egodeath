@@ -54,6 +54,12 @@ function mergeBlock(body: any[]): any[] {
       // Fold: a(), b(), ..., returnValue
       if (stmt.argument) {
         run.push(stmt.argument);
+      } else {
+        // A bare return must discard the preceding expression's value.
+        run.push({
+          type: 'UnaryExpression', operator: 'void', prefix: true,
+          argument: { type: 'NumericLiteral', value: 0 },
+        });
       }
       result.push({
         type: 'ReturnStatement',

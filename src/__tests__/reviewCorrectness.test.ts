@@ -120,3 +120,16 @@ describe('review: printing does not rewrite literal contents', () => {
     })).toThrow('Unable to minify obfuscated JavaScript');
   });
 });
+
+describe('review: bare returns and top-level RegExp shadowing', () => {
+  it.each([
+    'var log=[]; function f(){log.push(42); return;} module.exports=[f(),log];',
+    'const RegExp=123; module.exports=/a/i.test("A");',
+    'let RegExp=123; module.exports=[/a/.test("a"),RegExp];',
+    'const RegExp=123, globalThis=null; module.exports=/a/.test("a");',
+  ])('preserves behavior: %s', code => {
+    for (const targetTokens of [1, 100]) {
+      expect(evaluate(obfuscate(code, { targetTokens, stubConsole: false }))).toEqual(evaluate(code));
+    }
+  });
+});
