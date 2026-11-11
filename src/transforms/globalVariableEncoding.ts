@@ -58,8 +58,11 @@ function buildEvalReplace(ast: any, globalName: string): any {
  * the global (not a property access, declaration, or label).
  */
 function isGlobalReference(node: any, parent: any): boolean {
-  // Property of a member expression: obj.Math → don't touch "Math"
-  if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) {
+  // Property of a member expression: obj.Math / obj?.Math / obj?.a.Math →
+  // don't touch "Math". Babel parses every link of an optional chain as
+  // OptionalMemberExpression; rewriting its property gave `obj?.eval(...)`.
+  if ((parent.type === 'MemberExpression' || parent.type === 'OptionalMemberExpression') &&
+      parent.property === node && !parent.computed) {
     return false;
   }
   // Any non-computed member name — object/class method, getter/setter,
