@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # Build before npm reads package.json, so the bin target (dist/cli.js)
+      # exists and npm doesn't drop the bin entry from the published manifest.
+      - name: Build
+        run: npm run build
+
       # prepack clean-builds; prepublishOnly runs typecheck + tests.
       # Pre-release tags (e.g. v1.1.0-beta.1) publish under the "next" dist-tag.
       - name: Publish to npm
