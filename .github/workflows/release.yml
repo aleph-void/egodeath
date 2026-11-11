@@ -53,6 +53,8 @@ jobs:
       # Pre-release tags (e.g. v1.1.0-beta.1) publish under the "next" dist-tag.
       - name: Publish to npm
         env:
+          # Tests run in prepublishOnly; see ci.yml for the heap-size rationale.
+          NODE_OPTIONS: --max-old-space-size=6144
           PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           if [ "$PRERELEASE" = "true" ]; then

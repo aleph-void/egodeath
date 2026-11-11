@@ -45,4 +45,8 @@ jobs:
         run: npm run typecheck
 
       - name: Run tests
+        # Default V8 heap (~4 GB) is too small for the heaviest suites on Node 24;
+        # Jest workers inherit NODE_OPTIONS. 2 workers x 6 GB fits the 16 GB runner.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm test
