@@ -16,7 +16,7 @@ export function buildConsoleKeywords(): any[] {
 
   return methods.map((method) => {
     return recast.parse(`console.${method} = function (){};\n`, {
-      parser: require('recast/parsers/babel'),
+      parser: require('./babelParser'),
     }).program.body.pop();
   });
 }

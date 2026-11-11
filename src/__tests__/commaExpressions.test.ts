@@ -2,7 +2,7 @@ import { applyCommaExpressions } from '../transforms/commaExpressions';
 import { obfuscate } from '../obfuscator';
 import * as recast from 'recast';
 
-const babelParser = require('recast/parsers/babel');
+const babelParser = require('../babelParser');
 
 function parse(code: string): any {
   return recast.parse(code, { parser: babelParser });

@@ -78,7 +78,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   }
 
   const ast = recast.parse(code, {
-    parser: require('recast/parsers/babel'),
+    parser: require('./babelParser'),
   });
 
   // There is no user code to hide in an empty program. Running the full
@@ -814,7 +814,7 @@ function normalizeStringArrays(
   for (const r of results) {
     let ast: any;
     try {
-      ast = recast.parse(r.code, { parser: require('recast/parsers/babel') });
+      ast = recast.parse(r.code, { parser: require('./babelParser') });
     } catch {
       states.push({ filename: r.filename, ast: null, arrayExpr: null, currentLen: 0 });
       continue;

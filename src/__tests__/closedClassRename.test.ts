@@ -6,7 +6,7 @@ import { resetIssuedNames } from '../random';
 import { obfuscate } from '../obfuscator';
 
 function parse(code: string): any {
-  return recast.parse(code, { parser: require('recast/parsers/babel') });
+  return recast.parse(code, { parser: require('../babelParser') });
 }
 
 /** Collect method-name strings used as keys in the class body of `className`. */

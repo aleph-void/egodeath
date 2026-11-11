@@ -2,7 +2,7 @@ import { generateDeadCode, collectScopeVars } from '../transforms/deadCodeInject
 import { applyControlFlowFlattening } from '../transforms/controlFlowFlattening';
 import * as recast from 'recast';
 
-const babelParser = require('recast/parsers/babel');
+const babelParser = require('../babelParser');
 
 function parse(code: string): any {
   return recast.parse(code, { parser: babelParser });
