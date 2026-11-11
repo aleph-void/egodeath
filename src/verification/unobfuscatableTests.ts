@@ -230,27 +230,16 @@ export function testUrlLeak(targetTokens: number = 10000): ExtractionAttempt {
 
   const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
   const evidence = inspectSource(obfuscated);
-  const secretUrl = new URL(secret);
 
-  const directMatch = evidence.strings.some(value => {
-    try {
-      const parsed = new URL(value);
-      return (
-        parsed.protocol === secretUrl.protocol &&
-        parsed.hostname === secretUrl.hostname &&
-        parsed.pathname === secretUrl.pathname
-      );
-    } catch {
-      return false;
-    }
-  });
-  const domainMatch = evidence.strings.some(value => {
-    try {
-      return new URL(value).hostname === 'api.internal.example.com';
-    } catch {
-      return value === 'api.internal.example.com';
-    }
-  });
+  // This is a leakage detector, not URL validation or an allowlist. A URL or
+  // hostname embedded anywhere in a literal is evidence of exposed text,
+  // including inside another host, a query string, or a diagnostic message.
+  // Exact hostname comparison would miss those leaks. Suppress only the
+  // URL-validation rule at these intentional substring searches.
+  // codeql[js/incomplete-url-substring-sanitization]
+  const directMatch = evidence.strings.some(value => value.includes(secret));
+  // codeql[js/incomplete-url-substring-sanitization]
+  const domainMatch = evidence.strings.some(value => value.includes('api.internal.example.com'));
   const pathMatch = evidence.strings.some(value => value.includes('secret-endpoint'));
 
   return {
