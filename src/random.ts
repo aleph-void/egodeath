@@ -245,6 +245,15 @@ export function generateSharedNamePool(size: number): string[] {
 const MAX_COLLISION_RETRIES = 32;
 
 /**
+ * True when `name` was produced by gen() during the current obfuscate()
+ * run (i.e. it is one of egodeath's own identifiers, not one from the
+ * input source).
+ */
+export function isIssuedName(name: string): boolean {
+  return issuedNames.has(name);
+}
+
+/**
  * Clear the issued-names set. Called at the start of every obfuscate()
  * invocation so names don't leak across runs.
  */

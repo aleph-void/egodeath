@@ -1029,3 +1029,31 @@ describe('regression: ES module import/export bindings survive renaming', () => 
     });
   }
 });
+describe('regression: host globals unknown to the keyword list are never renamed', () => {
+  // The don't-rename list is built from Node's globalThis and a jsdom window,
+  // which lack many real browser APIs (IntersectionObserver, ResizeObserver,
+  // VideoDecoder, AudioContext, …). A free reference to such a global fell
+  // through to the flat rename map, so Vuetify's
+  // `new IntersectionObserver(cb)` became `new _0xab(cb)` and threw
+  // ReferenceError in the browser. Free references that come from the input
+  // (not names egodeath generated) are now left untouched.
+  const code = `
+    globalThis.FakeHostObserver = class {
+      constructor(cb) { this.seen = cb(); }
+    };
+    function observe(cb) {
+      if (typeof FakeHostObserver === 'undefined') return 'missing';
+      return new FakeHostObserver(cb).seen;
+    }
+    const viaMember = new globalThis.FakeHostObserver(() => 'member').seen;
+    module.exports = [observe(() => 'direct'), viaMember, typeof FakeHostObserver];
+  `;
+  afterEach(() => { delete (globalThis as any).FakeHostObserver; });
+
+  it.each([
+    ['low budget (rename + string array)', { targetTokens: Math.max(20, Math.round((2.5 * code.length) / 4)) }],
+    ['default test budget', DEFAULT_OPTS],
+  ])('keeps the reference working at %s', (_label, opts) => {
+    expect(retry(() => runAsCommonJSOnce(code, opts))).toEqual(['direct', 'member', 'function']);
+  });
+});
