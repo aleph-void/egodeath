@@ -1,5 +1,6 @@
 import { randInt, pick } from '../transformHelpers';
 import { VISITOR_KEYS } from '../visitorKeys';
+import { isLiteralNamePosition } from '../ast';
 import * as estraverse from 'estraverse';
 
 // ---- AST builders ----
@@ -244,9 +245,9 @@ function shouldSkipPosition(node: any, parent: any): boolean {
   // with the `_s = <state>` assignments, which are already encoded.
   // Object property keys: {3: "value"} — expressions not allowed without []
   if ((parent.type === 'Property' || parent.type === 'ObjectProperty') && parent.key === node) return true;
-  // Method/property definitions in classes with numeric keys
-  if ((parent.type === 'MethodDefinition' || parent.type === 'ClassMethod' ||
-       parent.type === 'ClassProperty' || parent.type === 'PropertyDefinition') && parent.key === node) return true;
+  // Method/getter/setter/class-member keys with numeric names: `get 0() {}`,
+  // `class { 1() {} }` — same rule, an expression needs a computed key.
+  if (isLiteralNamePosition(node, parent)) return true;
   return false;
 }
 
