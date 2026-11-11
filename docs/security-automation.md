@@ -5,7 +5,7 @@ Action versions are pinned to commit SHAs; Dependabot keeps those pins updated.
 
 | Automation | When it runs | What it checks |
 | --- | --- | --- |
-| CI | Pushes to `main`, pull requests targeting `main`, manual dispatch | TypeScript build and Jest tests on Node.js 22 and 24 |
+| CI | Pushes to `main`, pull requests targeting `main`, manual dispatch | TypeScript build and Jest tests on Node.js 24 and 26 |
 | CodeQL | Pushes to `main`, pull requests targeting `main`, Tuesdays at 07:23 UTC, manual dispatch | JavaScript/TypeScript code and GitHub Actions workflows; findings appear in GitHub's code scanning alerts |
 | Dependency Review | Pull requests targeting `main` | Newly introduced dependencies with high or critical known vulnerabilities fail the check |
 | npm Audit | Pushes to `main`, pull requests targeting `main`, Tuesdays at 07:41 UTC, manual dispatch | All locked production and development dependencies; high or critical vulnerabilities fail the check |

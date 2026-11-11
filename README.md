@@ -9,14 +9,11 @@ A JavaScript obfuscator designed to make code extremely difficult to read and an
 
 ## Requirements
 
-Node.js 24 is the default (see `.nvmrc`); Node.js 22.22.2+ also works.
-The supported range is `^22.22.2 || ^24.15.0`, the intersection of what
-jsdom 30 and webcrack accept. Node.js 20 and earlier are not supported --
-jsdom 30 pulls undici 8, which needs `markAsUncloneable` from
-`node:worker_threads` (Node 20.17+/22.2+). Node.js 26 is not supported yet
-either: webcrack caps at `<25`.
+Node.js 24 is the default (see `.nvmrc`); Node.js 26 also works.
+The supported range is `^24.15.0 || ^26.0.0`. Node.js 22 and earlier are
+not supported.
 `engine-strict=true` in `.npmrc` makes `npm install` reject an unsupported
-version up front rather than failing later with an opaque undici error.
+version up front rather than failing later with an opaque error.
 
 ```bash
 nvm use   # picks up .nvmrc
@@ -233,7 +230,7 @@ tests/
 
 ## Testing
 
-CI builds and tests on Node.js 22 and 24 (the minimum and the default). See [security automation](docs/security-automation.md)
+CI builds and tests on Node.js 24 and 26 (the default and the newest). See [security automation](docs/security-automation.md)
 for CodeQL, dependency review, npm audit, and automated dependency updates.
 
 ```bash
