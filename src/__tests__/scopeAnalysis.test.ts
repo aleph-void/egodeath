@@ -9,7 +9,7 @@ import { resetIssuedNames } from '../random';
 import { obfuscate } from '../obfuscator';
 
 function parse(code: string): any {
-  return recast.parse(code, { parser: require('recast/parsers/babel') });
+  return recast.parse(code, { parser: require('../babelParser') });
 }
 
 /** Collect every Identifier node in the AST so tests can assert on them directly. */

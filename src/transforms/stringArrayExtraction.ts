@@ -367,7 +367,7 @@ export function applyStringArrayExtraction(ast: any, _budget?: any): void {
   };`;
 
   const accessorAst = recast.parse(accessorCode, {
-    parser: require('recast/parsers/babel'),
+    parser: require('../babelParser'),
   });
   const accessorStmts = accessorAst.program.body; // cache decl + accessor decl
 

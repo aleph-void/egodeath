@@ -24,12 +24,17 @@ module.exports = {
       module: { type: 'commonjs' },
     }],
   },
-  // Transform only jsdom's ESM dependencies; leave other packages on Jest's
-  // default path. Revisit this list when upgrading jsdom if Jest reports an
-  // untransformed ESM import.
+  // Transform only the ESM-only packages pulled in by jsdom and @babel/parser
+  // (Babel 8 ships ESM only); leave other packages on Jest's default path.
+  // Revisit this list when upgrading either if Jest reports an untransformed
+  // ESM import.
   transformIgnorePatterns: [
     `/node_modules/(?!(?:${[
       '@asamuzakjp/css-color',
+      '@babel/helper-string-parser',
+      '@babel/helper-validator-identifier',
+      '@babel/parser',
+      '@babel/types',
       '@asamuzakjp/dom-selector',
       '@bramus/specificity',
       '@csstools/color-helpers',
@@ -38,9 +43,16 @@ module.exports = {
       '@csstools/css-parser-algorithms',
       '@csstools/css-tokenizer',
       '@exodus/bytes',
+      'bcp-47',
+      'bcp-47-match',
       'css-tree',
       'entities',
+      'is-alphabetical',
+      'is-alphanumerical',
+      'is-decimal',
+      'lru-cache',
       'parse5',
+      'parse5-parser-stream',
       'tough-cookie',
     ].join('|')})/)`,
   ],

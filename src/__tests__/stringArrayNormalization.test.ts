@@ -14,7 +14,7 @@ import { setStringArrayDecoys, clearStringArrayDecoys } from '../transforms/stri
  */
 function firstStringArrayLength(code: string): number {
   const recast = require('recast');
-  const ast = recast.parse(code, { parser: require('recast/parsers/babel') });
+  const ast = recast.parse(code, { parser: require('../babelParser') });
   for (const stmt of ast.program.body) {
     if (stmt.type !== 'VariableDeclaration') continue;
     for (const d of stmt.declarations || []) {

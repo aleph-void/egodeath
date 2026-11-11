@@ -3,7 +3,7 @@ import { applyTemplateLiteralFlattening } from '../transforms/templateLiteralFla
 import { obfuscate } from '../obfuscator';
 
 function parse(code: string): any {
-  return recast.parse(code, { parser: require('recast/parsers/babel') });
+  return recast.parse(code, { parser: require('../babelParser') });
 }
 
 function printAfterFlatten(code: string): string {

@@ -4,7 +4,7 @@ import { applyStringArrayExtraction, setStringArrayDecoys, clearStringArrayDecoy
 import { resetCapturedGlobals, flushCapturedGlobals } from '../capturedGlobals';
 import { resetGlobals } from '../globals';
 
-const parser = require('recast/parsers/babel');
+const parser = require('../babelParser');
 
 beforeEach(() => { resetGlobals(); resetCapturedGlobals(); });
 afterEach(() => clearStringArrayDecoys());

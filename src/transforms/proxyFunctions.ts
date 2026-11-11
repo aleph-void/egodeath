@@ -73,7 +73,7 @@ function id(name: string): any {
 
 function buildProxyDecl(name: string, code: string): any {
   const ast = recast.parse(`var ${name} = ${code}`, {
-    parser: require('recast/parsers/babel'),
+    parser: require('../babelParser'),
   });
   return ast.program.body[0];
 }
