@@ -232,7 +232,13 @@ export function testUrlLeak(targetTokens: number = 10000): ExtractionAttempt {
   const evidence = inspectSource(obfuscated);
 
   const directMatch = evidence.strings.some(value => value.includes(secret));
-  const domainMatch = evidence.strings.some(value => value.includes('api.internal.example.com'));
+  const domainMatch = evidence.strings.some(value => {
+    try {
+      return new URL(value).hostname === 'api.internal.example.com';
+    } catch {
+      return value === 'api.internal.example.com';
+    }
+  });
   const pathMatch = evidence.strings.some(value => value.includes('secret-endpoint'));
 
   return {
