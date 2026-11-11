@@ -190,3 +190,45 @@ describe('mutation-based dead code in CFF', () => {
     expect(passed).toBe(true);
   });
 });
+
+describe('regression: mutated copies keep constructor keys and private names valid', () => {
+  // Mutation renamed every identifier in the clone. That renamed a class's
+  // `constructor` key — making it an ordinary method, so the `super(...)`
+  // inside was a SyntaxError — and gave private names generated non-ASCII
+  // names, which terser's printer (the final minify) emits quoted:
+  // `#"ฒmő"=[]`, also a SyntaxError. Real bundles hit both through zod's
+  // error classes and Vuetify's CircularBuffer.
+  const { minify_sync } = require('terser');
+  const babel = require('@babel/parser');
+
+  const donors = parse(`
+    var AsyncErr = class extends Error {
+      constructor(name) { super("encode: " + name); this.name = "EncodeErr"; }
+    };
+    var Ring = class {
+      #arr = [];
+      #pointer = 0;
+      constructor(size) { this.size = size; }
+      push(val) { this.#arr[this.#pointer] = val; this.#pointer = (this.#pointer + 1) % this.size; }
+    };
+    var check = function probe() { return new.target; };
+  `).program.body;
+
+  it('every mutated class copy parses, before and after the final minify', () => {
+    let classCopies = 0;
+    for (let i = 0; i < 60; i++) {
+      const dead = generateDeadCode([], 1, donors);
+      const code = recast.print({ type: 'File', program: { type: 'Program', body: dead } }).code;
+      if (!code.includes('class')) continue; // template-based dead code this time
+      classCopies++;
+      // Wrapped in a function, as dead code always is (CFF case bodies).
+      const wrapped = `function host() {\n${code}\n}`;
+      expect(() => babel.parse(wrapped, { sourceType: 'script' })).not.toThrow();
+      const minified = minify_sync(wrapped, { mangle: false, compress: false }).code;
+      expect(() => babel.parse(minified, { sourceType: 'script' })).not.toThrow();
+      expect(minified).not.toMatch(/#"/); // no quoted private names
+      if (code.includes('extends')) expect(code).toMatch(/\bconstructor\s*\(/);
+    }
+    expect(classCopies).toBeGreaterThan(5);
+  });
+});
