@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>egodeath &mdash; JavaScript Obfuscation for the Age of LLMs</title>
+  <meta name="description" content="egodeath is an open-source JavaScript obfuscator that rewrites code through a 20-transform pipeline to make it extremely hard to read for both humans and LLMs. CLI and library, MIT licensed, by Aleph Void." />
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="egodeath" />
+  <meta property="og:url" content="https://egodeath.alephvoid.com/" />
+  <meta property="og:title" content="egodeath — JavaScript Obfuscation for the Age of LLMs" />
+  <meta property="og:description" content="A 20-transform JavaScript obfuscator built to frustrate human reverse engineers and LLMs alike. Free and open source." />
+  <meta property="og:image" content="https://egodeath.alephvoid.com/assets/img/screenshot.png" />
+  <meta property="og:image:alt" content="JavaScript after egodeath: Unicode identifiers, encoded numbers and flattened control flow" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="egodeath — JavaScript Obfuscation for the Age of LLMs" />
+  <meta name="twitter:description" content="A 20-transform JavaScript obfuscator built to frustrate human reverse engineers and LLMs alike. Free and open source." />
+  <meta name="twitter:image" content="https://egodeath.alephvoid.com/assets/img/screenshot.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav id="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">
+        <img class="nav-logo" src="assets/img/logo.svg" alt="" />
+        <span>egodeath</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#research">Research</a>
+        <a href="#usage">Usage</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <div class="nav-actions">
+        <a href="https://github.com/aleph-void/egodeath" class="btn btn-sm btn-primary" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="#features">Features</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#research">Research</a>
+      <a href="#usage">Usage</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/aleph-void/egodeath" class="btn btn-primary" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <div class="hero-badge">// JavaScript obfuscator &middot; CLI &amp; library</div>
+        <h1>Make Your JavaScript<br /><span class="text-gradient">Unreadable to Humans and LLMs</span></h1>
+        <p class="hero-subtitle">
+          egodeath rewrites your code through a 20-transform pipeline: flattened control flow,
+          identifiers drawn from 16 Unicode scripts, a chained-XOR string table and dead code
+          cloned from your real statements. The program still runs. Reading it is another matter.
+        </p>
+        <div class="install-line">
+          <span class="prompt">$</span>
+          <span class="cmd" id="install-cmd">npm install -g egodeath</span>
+          <button class="copy-btn" type="button" data-copy="install-cmd" aria-label="Copy install command">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <div class="hero-actions">
+          <a href="#usage" class="btn btn-primary btn-lg">Get Started</a>
+          <a href="https://github.com/aleph-void/egodeath" class="btn btn-outline btn-lg" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="btn-icon"><path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+        <div class="callout" role="note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div><strong>Deterrence, not secrecy.</strong> egodeath does not achieve indistinguishability obfuscation. It raises the cost of reverse engineering; it does not prevent it. Never ship secrets in client-side code, obfuscated or not.</div>
+        </div>
+      </div>
+
+      <!-- Before / after -->
+      <div class="hero-visual">
+        <div class="editor">
+          <div class="editor-bar" role="tablist" aria-label="Sample code">
+            <div class="editor-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <button class="editor-tab" type="button" role="tab" id="tab-in" aria-controls="pane-in" aria-selected="false">license.js</button>
+            <button class="editor-tab" type="button" role="tab" id="tab-out" aria-controls="pane-out" aria-selected="true">license.obf.js</button>
+            <span class="editor-meta" id="editor-meta">8 lines &rarr; 64 KB</span>
+          </div>
+          <div class="editor-pane" id="pane-in" role="tabpanel" aria-labelledby="tab-in" hidden>
+<pre><span class="k">function</span> checkLicense(key) {
+  <span class="k">const</span> parts = key.split(<span class="s">"-"</span>);
+  <span class="k">if</span> (parts.length !== <span class="n">4</span>) <span class="k">return</span> <span class="k">false</span>;
+  <span class="k">let</span> sum = <span class="n">0</span>;
+  <span class="k">for</span> (<span class="k">const</span> p <span class="k">of</span> parts) sum += parseInt(p, <span class="n">16</span>);
+  <span class="k">return</span> sum % <span class="n">97</span> === <span class="n">42</span>;
+}
+console.log(checkLicense(<span class="s">"1A2B-3C4D-5E6F-7081"</span>));</pre>
+          </div>
+          <div class="editor-pane wrap" id="pane-out" role="tabpanel" aria-labelledby="tab-out" tabindex="0">
+<pre id="sample-out">while(true){switch(졏r왓ऻ膠晷ॕᄣڶ䏜䦑ヺタI녳り*(43&lt;&lt;4&gt;&gt;&gt;4|0)%(104669+90)){case 513275/7:var ՓミFT饒䫡ย砟ӈĖӚlÁ鴔Յ=26+217-217|0;var Ղ॔筏ऎ繾ขև駣ΎじΥù=~~(228^234^0)|0;var ᆄաþॕᄣڶ䏜ᅇ=63^65312^65312;var ᆶϒ죻C쯌џォN=~~(43^49^0)|0;var ᆻゾ䒰倛कた蝱뜿S=8&lt;&lt;2&gt;&gt;&gt;2;var 鼨膠晷ॕᄣڶ䏜䦑ヺタ=88^7155^7155;var ժ䏜ڜじ䤋X䊓㺘瑿ՎH=~-60;var ᆈ퇊४䰅Øػ゚ϓO䗷ᅔ榍ᇃ툐Ւᅟ=(2&lt;&lt;4)+15;var 孈εԴΫちӔ䏜ڜじ䤋ヌ=42^12964^12964;Ͻᅱكᆬơॷҩ맧โЬऑ擶nÝ(function(ョƁքþLゼŬ맮uู,Լ๓ᄐY䂖ᅀ䓩=~-183|0){var VّCیՁ멇αろپにъ=Թȗ㖹뵪봌ïìی||(Թȗ㖹뵪봌ïìی=N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(473).replace(new アhω膠晷ॕᄣڶ䏜(N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(392)),""));var Ò활ρにӗ쵎BÁई٩áヌKヨɇ攆륣㽣ᆟi=ñۮΉ䟆ᆮêᄳ||(ñۮΉ䟆ᆮêᄳ=N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(401).replace(new アhω膠晷ॕᄣڶ䏜(N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(327)),""));var چろฝËҕϰӄउヵzळԲ쁞でエӚՉԹ=属돗hャmᇕӰぃыセÿᆦヱ暾ÇλΙխۑ||(属돗hャmᇕӰぃыセÿᆦヱ暾ÇλΙխۑ=N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(383).replace(new アhω膠晷ॕᄣڶ䏜(N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(380)),""));var 淏ҭë㘾Tけôॢۛ;var ᆄաþॕᄣڶڎρ=6800+147-147|0;while(true){switch(ᆄաþॕᄣڶڎρ*(~~(208^235^0)|0)%(104831&lt;&lt;3&gt;&gt;&gt;3)){case~-80147:var をџ㪣ҌuuょユヺÃӈᆊֆの=~-42;var ϫūゼŬ맮uูƇぜ䬦Ό돥स=182/2;var โÃちóढ㩓ᄝᆾуŃ=465-403|0;var ڌӜऀև३っZをժ퇮=-256+308;をџ㪣ҌuuょユヺÃӈᆊֆの=(typeof ϫūゼŬ맮uูƇぜ䬦Ό돥स===N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(408)?ϫūゼŬ맮uูƇぜ䬦Ό돥स[VّCیՁ멇αろپにъ]|(-9&lt;&lt;3)+3:0)|(219833+21-21|0),ڌӜऀև३っZをժ퇮=5613+35-35|0|0;break;ᆄաþॕᄣڶڎρ=~~(6736^192^0)|0;break;case 76961-497:return;case~-14433:if(typeof ョƁքþLゼŬ맮uู!==N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(331)&amp;&amp;淏ҭë㘾Tけôॢۛ!==~-2058179042){ᆄաþॕᄣڶڎρ=7591^193|0;break}else{ᆄաþॕᄣڶڎρ=1189*8+7;break}case 24598+112:{ョƁքþLゼŬ맮uู=null}ᆄաþॕᄣڶڎρ=(594&lt;&lt;4)+15;break;case 35825+92-92|0:var q媸轭խAa䉉bwvϱว=~-23;var ゲॴ゙рᄷҘÌű旷ԹりnパऑӄհǛठÜٮ=-337+391;var DऄمƓÝճы눖㳪びsϫūゼŬ맮=863-844;nڛミ䊻խう㲯Oओ(q媸轭խAa䉉bwvϱว,N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(396))(),DऄمƓÝճы눖㳪びsϫūゼŬ맮=~-1253|0;break;ᆄաþॕᄣڶڎρ=7526+167-167|0|0;break;case~~(86567^148^0)|0:淏ҭë㘾Tけôॢۛ=(typeof ョƁքþLゼŬ맮uู!==N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(447)?ョƁքþLゼŬ맮uู[Ò활ρにӗ쵎BÁई٩áヌKヨɇ攆륣㽣ᆟi]&amp;(-39^30721^30721|0):0)&amp;219650+214,ᆄաþॕᄣڶڎρ=~~(5572^3^0)|0;break;case 37670-204:if(ョƁքþLゼŬ맮uู&amp;&amp;ョƁքþLゼŬ맮uู[چろฝËҕϰӄउヵzळԲ쁞でエӚՉԹ]){ᆄաþॕᄣڶڎρ=(11&lt;&lt;4)+5;break}else{ᆄաþॕᄣڶڎρ=~-1297;break}case 10497^182:nڛミ䊻խう㲯Oओ(ョƁքþLゼŬ맮uู,N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(402))(),ᆄաþॕᄣڶڎρ=~-1297;break}}},Ͻᅱكᆬơॷҩ맧โЬऑ擶nÝ(typeof ᆻゾ䒰倛कた蝱뜿S===N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(344)?ᆻゾ䒰倛कた蝱뜿S:function(Пß썳ӌz䲪うƩk퇊४䰅Øػӣҋ=~-54|0,ƪՁだฃฦू=~-45|0,Λ夌ՄてᆂԱ绞ॶÝまáRrホ꾝ڢҤ贵=62&lt;&lt;1&gt;&gt;&gt;1,еXฟօÉ쁜뗨Ջȍ=439-210|0,ॐ䛩坚Îшᄓ=~~(235^194^0)|0,อزҙùڟڶЦUýз=261-136,Eザўvbホ홵=104&lt;&lt;4&gt;&gt;&gt;4,SҒÒ뛂á䑤ऐ۳ユ=29*3,膠晷ॕᄣڶ䏜䦑ヺƅ=883-686,ڷॡ곰üゴ亀ƃ槐カȆWืめ=345-296,іуŃれÐMҐս=154&lt;&lt;4&gt;&gt;&gt;4|0){},function(뾲ᄼ蚟ぱƩ翣で㢾䃏ѫ꽤ᄋぜげ๑咊ॺƌ=1,ĒõǓ楢ョQۇُヒ=192&lt;&lt;1&gt;&gt;&gt;1|0,ฐюJ更䌋ᅢ=627-479|0){Ͻᅱكᆬơॷҩ맧โЬऑ擶nÝ(鼨膠晷ॕᄣڶ䏜䦑ヺタ,nڛミ䊻խう㲯Oओ(N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(393),N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(347))(new ᆈ퇊४䰅Øػ゚ϓO䗷ᅔ榍ᇃ툐Ւᅟ(N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(351)),N繳䃢Aմॕนա์थᇠdど퍣ًnҭaϦy(436)))},2229*9+1)),孈εԴΫちӔ䏜ڜじ䤋ヌ=14475^17663^17663,졏r왓ऻ膠晷ॕᄣڶ䏜䦑ヺタI녳り=2044&lt;&lt;&hellip;</pre>
+          </div>
+          <div class="editor-foot">
+            <span>npx egodeath --target-tokens 3000 license.js</span>
+            <a href="assets/sample/output.js" target="_blank" rel="noopener">Full output &#x2197;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section class="stats" aria-label="At a glance">
+    <div class="container stats-grid">
+      <div><div class="stat-value">20</div><div class="stat-label">Transforms</div></div>
+      <div><div class="stat-value">4</div><div class="stat-label">Pipeline phases</div></div>
+      <div><div class="stat-value">16</div><div class="stat-label">Unicode scripts</div></div>
+      <div><div class="stat-value">7</div><div class="stat-label">Research papers</div></div>
+      <div><div class="stat-value">600+</div><div class="stat-label">Tests</div></div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// Features</span>
+        <h2>Built to Waste an <span class="text-gradient">Analyst&rsquo;s Time</span></h2>
+        <p>Each transform targets a different shortcut a reader would take, whether that reader is a person with a debugger or a model with a context window.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+          <h3>Control Flow Flattening</h3>
+          <p>Function bodies become <code>while(true){switch(...)}</code> state machines. Case labels are encoded through modular arithmetic with random primes, so the execution order isn&rsquo;t written down anywhere.</p>
+          <span class="paper-ref">Gentry, Lewko, Sahai, Waters</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></div>
+          <h3>Unicode Identifiers</h3>
+          <p>Every name is replaced with 6 to 16 random characters drawn from CJK, Hangul, Greek, Cyrillic, Devanagari, Thai, Arabic, Katakana and more. Good luck reading <code>ᆄաþॕᄣڶ䏜ᅇ</code> aloud.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3>Chained String Encryption</h3>
+          <p>All strings move into one array. Each entry&rsquo;s XOR key depends on the decoded content of the entry before it, with sparse, position-dependent errors mixed in. Unused decoys stay encoded.</p>
+          <span class="paper-ref">Garg et al. &middot; Ragavan et al.</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg></div>
+          <h3>Mutation-Based Dead Code</h3>
+          <p>Dead code isn&rsquo;t generic filler. egodeath clones your real statements and mutates their operators, constants and names, so the fake branches are structurally identical to the live ones.</p>
+          <span class="paper-ref">Gentry, Lewko, Sahai, Waters</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v1a4 4 0 0 0-4 4 4 4 0 0 0 2 3.46V16a4 4 0 0 0 4 4h0a2 2 0 0 0 2-2"/><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1 4 4 4 4 0 0 1-2 3.46V16a4 4 0 0 1-4 4h0a2 2 0 0 1-2-2"/><path d="M12 2v16"/></svg></div>
+          <h3>LLM Context Exhaustion</h3>
+          <p>Expressions are wrapped in deeply nested ternaries with opaque conditions and void chains. A token budget can push output into the millions of tokens, past what a model can hold at once.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <h3>Anti-Debug &amp; Self-Integrity</h3>
+          <p><code>debugger</code> traps on prime-number intervals, <code>Function.prototype.toString</code> checks and timing-anomaly detection. Tampering triggers busy waits, throws or silent corruption.</p>
+          <span class="paper-ref">Bartusek, Malavolta</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+          <h3>Punctured-Program Tripwires</h3>
+          <p>Hidden checks compare parameter hashes against secret values using five hash patterns. On a match they corrupt state or stall, punishing anyone fuzzing your functions.</p>
+          <span class="paper-ref">Sahai, Waters</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h4l3-8 4 16 3-8h2"/></svg></div>
+          <h3>LPN-Inspired Noise</h3>
+          <p>Arithmetic gets random noise added and cancelled through split paths: add/sub, XOR, mul/div, hash chains and bit rotations. Intermediate values mean nothing until the whole path is traced.</p>
+          <span class="paper-ref">Jain, Lin, Sahai</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></div>
+          <h3>One Knob: Token Budget</h3>
+          <p><code>--target-tokens</code> sets the output size. Small inputs are bloated up to the budget; large inputs get less padding to stay within it. Heavier transforms switch on as the budget grows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pipeline -->
+  <section id="pipeline" class="section section--alt">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// Pipeline</span>
+        <h2>Four Phases, <span class="text-gradient">Each Building on the Last</span></h2>
+        <p>Your source is parsed once and passed through the pipeline in order. Later phases encode what earlier phases produced, so no layer can be peeled off on its own.</p>
+      </div>
+      <div class="phase-grid">
+        <div class="phase-card">
+          <div class="phase-num">1</div>
+          <h3>Anti-Analysis</h3>
+          <p>Make dynamic analysis expensive.</p>
+          <ol class="phase-list">
+            <li>Anti-debug traps</li>
+            <li>Punctured-program tripwires</li>
+            <li>LPN noise injection</li>
+          </ol>
+        </div>
+        <div class="phase-card">
+          <div class="phase-num">2</div>
+          <h3>Structure</h3>
+          <p>Destroy the shape of the code.</p>
+          <ol class="phase-list">
+            <li>Control flow flattening</li>
+            <li>Opaque predicates</li>
+            <li>Proxy function dispatch</li>
+            <li>Context window exhaustion</li>
+            <li>Comma expression merging</li>
+          </ol>
+        </div>
+        <div class="phase-card">
+          <div class="phase-num">3</div>
+          <h3>Identifiers</h3>
+          <p>Erase every meaningful name.</p>
+          <ol class="phase-list">
+            <li>Catalog identifiers</li>
+            <li>Substitute Unicode names</li>
+            <li>Inject dummy parameters</li>
+          </ol>
+        </div>
+        <div class="phase-card">
+          <div class="phase-num">4</div>
+          <h3>Encoding</h3>
+          <p>Hide every literal and lookup.</p>
+          <ol class="phase-list">
+            <li>Global variable encoding</li>
+            <li>Property key encoding</li>
+            <li>Number encoding (11 strategies)</li>
+            <li>Self-integrity checks</li>
+            <li>Chained-XOR string array</li>
+            <li>Console stubs</li>
+            <li>Terser minification</li>
+          </ol>
+        </div>
+      </div>
+      <p class="pipeline-note">Dead code is injected throughout: extra switch cases in flattened functions, the false branches of opaque predicates, and standalone blocks, all scaled by the token budget.</p>
+
+      <h3 class="subsection-title">What the Budget Turns On</h3>
+      <p class="subsection-note">The budget ratio compares the target size to your input. The dead-code multiplier scales from 1&times; at ratio 30 to 150&times; at 1,500 and above.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Budget ratio</th><th>Transforms enabled</th></tr></thead>
+          <tbody>
+            <tr><td class="nowrap">&gt; 3</td><td>Anti-debug, tripwires, control flow flattening, opaque predicates, comma merging</td></tr>
+            <tr><td class="nowrap">&gt; 5</td><td>Proxy functions, property key encoding, noise injection, self-integrity</td></tr>
+            <tr><td class="nowrap">&gt; 8</td><td>Context window exhaustion</td></tr>
+            <tr><td class="nowrap">&gt; 10</td><td>Global variable encoding</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Screenshot -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// In the Wild</span>
+        <h2>What <span class="text-gradient">minimist</span> Looks Like Afterwards</h2>
+        <p>The popular argument parser, bundled with webpack and run through egodeath. Its own test suite still passes against the output.</p>
+      </div>
+      <figure class="shot">
+        <img src="assets/img/screenshot.png" alt="An obfuscated minimist bundle open in an editor: lines of Unicode identifiers, XOR-encoded numbers and switch-based state machines" loading="lazy" width="2253" height="2192" />
+        <figcaption>dist/obfuscated/minimist/bundle.js</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Research -->
+  <section id="research" class="section section--alt">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// Research</span>
+        <h2>Ideas Borrowed from <span class="text-gradient">Cryptographic Obfuscation</span></h2>
+        <p>Indistinguishability obfuscation is a theoretical construction that is far too slow to run. egodeath takes practical, heuristic techniques inspired by that literature. They are inspirations, not implementations of the proofs.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Paper</th><th>Technique in egodeath</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://www.wisdom.weizmann.ac.il/~oded/p_obfuscate.pdf" target="_blank" rel="noopener">On the (Im)possibility of Obfuscating Programs</a><small>Barak, Goldreich, Impagliazzo, Rudich, Sahai, Vadhan, Yang</small></td><td>Static leakage probes that check whether planted secrets survive obfuscation</td></tr>
+            <tr><td><a href="https://eprint.iacr.org/2013/451.pdf" target="_blank" rel="noopener">Candidate iO and Functional Encryption for all Circuits</a><small>Garg, Gentry, Halevi, Raykova, Sahai, Waters</small></td><td>Chained string decryption, where each key depends on the previous decoded entry</td></tr>
+            <tr><td><a href="https://eprint.iacr.org/2014/309.pdf" target="_blank" rel="noopener">iO from the Multilinear Subgroup Elimination Assumption</a><small>Gentry, Lewko, Sahai, Waters</small></td><td>Mutation-based dead code; modular-arithmetic state transitions in flattened control flow</td></tr>
+            <tr><td><a href="https://eprint.iacr.org/2013/454.pdf" target="_blank" rel="noopener">How to Use iO: Deniable Encryption, and More</a><small>Sahai, Waters</small></td><td>Punctured-program tripwires on secret inputs</td></tr>
+            <tr><td><a href="https://eprint.iacr.org/2020/1003.pdf" target="_blank" rel="noopener">iO from Well-Founded Assumptions</a><small>Jain, Lin, Sahai</small></td><td>LPN-inspired noise in numeric computations</td></tr>
+            <tr><td><a href="https://eprint.iacr.org/2024/856.pdf" target="_blank" rel="noopener">iO from Bilinear Maps and LPN Variants</a><small>Ragavan, Vafa, Vaikuntanathan</small></td><td>Sparse XOR encoding with position-dependent errors</td></tr>
+            <tr><td><a href="https://arxiv.org/pdf/2106.06094.pdf" target="_blank" rel="noopener">iO of Null Quantum Circuits and Applications</a><small>Bartusek, Malavolta</small></td><td>Null-circuit test for dead-code quality; dual-mode self-integrity checks</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Usage -->
+  <section id="usage" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// Usage</span>
+        <h2>A CLI and a <span class="text-gradient">Library</span></h2>
+        <p>Requires Node.js 24 or 26 (<code>^24.15.0 || ^26.0.0</code>). Install it globally for the command line, or as a dependency to call from your build.</p>
+      </div>
+      <div class="code-grid">
+        <div class="code-card">
+          <h3>Command line</h3>
+<pre class="code"><span class="dim"># Install</span>
+npm install -g egodeath
+
+<span class="dim"># Default budget: 2,000,000 tokens</span>
+egodeath input.js &gt; output.js
+
+<span class="dim"># Compact output</span>
+egodeath --target-tokens 10000 input.js &gt; output.js
+
+<span class="dim"># Maximum bloat</span>
+egodeath --target-tokens 10000000 input.js &gt; output.js</pre>
+        </div>
+        <div class="code-card">
+          <h3>Library</h3>
+<pre class="code"><span class="dim">// npm install egodeath</span>
+<span class="k">const</span> { obfuscate } = require(<span class="s">'egodeath'</span>);
+
+<span class="k">const</span> source = <span class="s">'function add(a, b) { return a + b; }'</span>;
+
+<span class="dim">// Returns the obfuscated source as a string</span>
+<span class="k">const</span> out = obfuscate(source, {
+  targetTokens: <span class="n">10000</span>,
+});</pre>
+        </div>
+      </div>
+
+      <h3 class="subsection-title">Tested Against Real Packages</h3>
+      <p class="subsection-note">A compatibility tool clones each package, bundles it with webpack, obfuscates the bundle and runs the package&rsquo;s own test suite against the result.</p>
+      <div class="chip-row">
+        <span class="chip">lodash</span><span class="chip">chalk</span><span class="chip">commander</span><span class="chip">debug</span><span class="chip">express</span><span class="chip">axios</span><span class="chip">moment</span><span class="chip">uuid</span><span class="chip">minimist</span><span class="chip">semver</span>
+      </div>
+      <p class="note"><code>npm run obfuscate-package -- minimist semver</code> runs it from a clone of the repository.</p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="section section--alt">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-label">// FAQ</span>
+        <h2>Frequently Asked <span class="text-gradient">Questions</span></h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Can I use it to protect API keys or other secrets?</summary>
+          <p>No. egodeath does not achieve indistinguishability obfuscation, and nothing practical does. A determined analyst can run the code and watch what it does. Use it to deter casual copying and slow down reverse engineering, and keep real secrets on a server.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does the obfuscated code behave the same?</summary>
+          <p>That is the goal, and it is checked by 600+ unit tests plus a tool that runs real npm packages&rsquo; own test suites against their obfuscated bundles. There is one deliberate difference: every <code>console</code> method is replaced with a no-op, so obfuscated code does not log.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Will it run under a strict Content Security Policy?</summary>
+          <p>Probably not. Global variable encoding and the anti-debug traps use <code>eval</code>, so a page that forbids <code>'unsafe-eval'</code> will block them. egodeath is not designed for strict-CSP pages; if you use it there, the policy has to allow <code>eval</code>.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How big and slow does the output get?</summary>
+          <p>As big as you let it. The sample on this page grows an 8-line function to about 64&nbsp;KB at a 3,000-token budget; the default budget is 2,000,000 tokens. Flattened control flow, proxy dispatch and string decoding all add runtime cost, so pick the smallest budget that meets your needs and benchmark hot paths.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Why target LLMs specifically?</summary>
+          <p>Models are now a common first step in reverse engineering: paste the bundle, ask what it does. egodeath fights that with output too large for a context window, meaningless identifiers in mixed scripts, and dead code indistinguishable from live code, so a summary of the code is likely to be a summary of noise.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Is it free?</summary>
+          <p>Yes. egodeath is open source under the MIT license. Issues and pull requests are welcome on <a href="https://github.com/aleph-void/egodeath" target="_blank" rel="noopener">GitHub</a>.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- Closing -->
+  <section class="oss-band">
+    <div class="container">
+      <span class="section-label">// Open Source</span>
+      <h2>Free, MIT-Licensed, <span class="text-gradient">Built in the Open</span></h2>
+      <p>Written in TypeScript. Read every transform, run the verification tools yourself, or add a new technique with its tests.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/aleph-void/egodeath" class="btn btn-primary" target="_blank" rel="noopener">Source on GitHub</a>
+        <a href="https://www.npmjs.com/package/egodeath" class="btn btn-outline" target="_blank" rel="noopener">egodeath on npm</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <img class="footer-logo" src="assets/img/logo.svg" alt="" />
+          <span>egodeath</span>
+        </div>
+        <div class="footer-links">
+          <a href="#features">Features</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#research">Research</a>
+          <a href="#usage">Usage</a>
+          <a href="#faq">FAQ</a>
+          <a href="https://github.com/aleph-void/egodeath" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://www.npmjs.com/package/egodeath" target="_blank" rel="noopener">npm</a>
+          <a href="https://alephvoid.com" target="_blank" rel="noopener">Aleph Void</a>
+        </div>
+        <p class="footer-copy">Created by <a href="https://alephvoid.com" target="_blank" rel="noopener">Aleph Void LLC</a>. Released under the MIT license.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

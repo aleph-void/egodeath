@@ -1,0 +1,73 @@
+name: Deploy site
+
+# Publishes site/ (the marketing site at egodeath.alephvoid.com) to GitHub Pages.
+# The sample output shown on the page is regenerated from the current build on
+# every deploy, so it always reflects what egodeath actually produces.
+# site/assets/img/screenshot.png is a symlink to images/screenshot.png; rsync -L
+# copies the real file into the Pages artifact.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'images/**'
+      - 'src/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Assemble site
+        run: |
+          mkdir -p dist-site
+          rsync -aL --exclude=README.md site/ dist-site/
+          node dist/cli.js --target-tokens 3000 site/assets/sample/input.js > dist-site/assets/sample/output.js
+          # The sample must still run and the screenshot must have been copied, not linked.
+          timeout 60 node dist-site/assets/sample/output.js
+          test -s dist-site/assets/sample/output.js
+          test -f dist-site/assets/img/screenshot.png && test ! -L dist-site/assets/img/screenshot.png
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ./dist-site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
