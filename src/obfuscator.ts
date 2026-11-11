@@ -85,7 +85,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // default-budget pipeline would instead obfuscate its own injected helpers,
   // consuming gigabytes of heap for an otherwise empty input.
   if (ast.program.body.length === 0) {
-    ast.program.body = buildConsoleKeywords();
+    ast.program.body = opts.stubConsole === false ? [] : buildConsoleKeywords();
     const output = shebang + recast.print(ast).code;
     return minify_sync(output, {
       mangle: false,
@@ -258,8 +258,10 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // `var RegExp = …` (lodash runInContext). See capturedGlobals.ts.
   flushCapturedGlobals(ast);
 
-  const consoleKeywords = buildConsoleKeywords();
-  ast.program.body = consoleKeywords.concat(ast.program.body);
+  if (opts.stubConsole !== false) {
+    const consoleKeywords = buildConsoleKeywords();
+    ast.program.body = consoleKeywords.concat(ast.program.body);
+  }
 
   // Strip original source positions from every node before printing.
   // Recast preserves original whitespace/ASI when a node still carries its
