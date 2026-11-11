@@ -1,26 +1,12 @@
 /**
- * Unobfuscatable Function Test Cases (Paper 1: Barak et al.)
- *
- * Paper 1 proves that VBB obfuscation is impossible by constructing
- * specific function families where secrets can ALWAYS be extracted
- * from any program that computes the function. These are pathological
- * cases that test the limits of any obfuscator.
- *
- * We implement these as test cases for our obfuscator. Each test
- * constructs a "hard" function, obfuscates it, then attempts to
- * extract the embedded secret from the obfuscated output. If the
- * secret is extractable, we know our obfuscation is insufficient
- * for that pattern — and we can measure HOW extractable it is.
- *
- * Test categories:
- * 1. Password/point functions: f(x) = (x === secret) ? 1 : 0
- * 2. Self-referencing programs: functions that embed their own source
- * 3. Correlation extractors: functions where output correlates with source
- * 4. Signature-like functions: functions with embedded keys
- * 5. Canary values: functions with distinctive constant patterns
+ * Static leakage probes inspired by obfuscation examples. These are not
+ * implementations of cryptographic impossibility proofs or a security score.
+ * A PASS means only that this particular static probe found no evidence;
+ * runtime decoding, data-flow analysis and other attacks may still succeed.
  */
 
 import { obfuscate } from '../obfuscator';
+import { inspectSource, hasOperatorSequence, hasByteSequence } from './sourceAnalysis';
 
 // ---- Test result types ----
 
@@ -64,13 +50,14 @@ export function testPointFunction(targetTokens: number = 10000): ExtractionAttem
     module.exports = checkPassword;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
   // Extraction attempt: search for the password string directly
-  const directMatch = obfuscated.includes(secret);
+  const directMatch = evidence.strings.some(value => value.includes(secret));
   // Also try partial matches (substrings of 8+ chars)
   const partialMatch = secret.length >= 8 &&
-    obfuscated.includes(secret.substring(0, 8));
+    evidence.strings.some(value => value.includes(secret.substring(0, 8)));
 
   return {
     name: 'Point Function (Password Check)',
@@ -84,7 +71,7 @@ export function testPointFunction(targetTokens: number = 10000): ExtractionAttem
       ? 'FAIL: Password found as literal string in output'
       : partialMatch
         ? 'WEAK: Password prefix found in output'
-        : 'PASS: Password not found in output (hidden by string array + XOR encoding)',
+        : 'PASS: Password absent from parsed literals; runtime decoding was not tested',
   };
 }
 
@@ -110,12 +97,12 @@ export function testMagicNumber(targetTokens: number = 10000): ExtractionAttempt
     module.exports = hash;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
   // Search for the magic number in various representations
-  const decMatch = obfuscated.includes('3735928559');
-  const hexMatch = obfuscated.includes('0xDEADBEEF') || obfuscated.includes('0xdeadbeef');
-  const fnvMatch = obfuscated.includes('16777619');
+  const decMatch = evidence.numbers.includes(3735928559);
+  const fnvMatch = evidence.numbers.includes(16777619);
 
   return {
     name: 'Magic Number Extraction',
@@ -124,12 +111,12 @@ export function testMagicNumber(targetTokens: number = 10000): ExtractionAttempt
     originalCode: code,
     obfuscatedCode: obfuscated,
     secret,
-    secretExtracted: decMatch || hexMatch || fnvMatch,
-    extractionDetails: decMatch || hexMatch
-      ? 'FAIL: Magic number 0xDEADBEEF found in output'
+    secretExtracted: decMatch || fnvMatch,
+    extractionDetails: decMatch
+      ? 'FAIL: Magic number 0xDEADBEEF recovered from literals or constant expressions'
       : fnvMatch
         ? 'WEAK: FNV prime 16777619 found in output'
-        : 'PASS: Magic numbers hidden by number encoding',
+        : 'PASS: Magic numbers absent from literals and constant numeric expressions',
   };
 }
 
@@ -150,15 +137,16 @@ export function testCanaryString(targetTokens: number = 10000): ExtractionAttemp
     module.exports = getVersion;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
-  const directMatch = obfuscated.includes(secret);
+  const directMatch = evidence.strings.some(value => value.includes(secret));
   // Try fragments
   const fragmentMatch =
-    obfuscated.includes('MyApp') ||
-    obfuscated.includes('v2.3.1') ||
-    obfuscated.includes('licensed') ||
-    obfuscated.includes('user42');
+    evidence.strings.some(value => value.includes('MyApp')) ||
+    evidence.strings.some(value => value.includes('v2.3.1')) ||
+    evidence.strings.some(value => value.includes('licensed')) ||
+    evidence.strings.some(value => value.includes('user42'));
 
   return {
     name: 'Canary String Pattern',
@@ -172,7 +160,7 @@ export function testCanaryString(targetTokens: number = 10000): ExtractionAttemp
       ? 'FAIL: Canary string found verbatim in output'
       : fragmentMatch
         ? 'WEAK: Canary string fragments found in output'
-        : 'PASS: Canary string fully hidden',
+        : 'PASS: Canary absent from parsed literals; runtime decoding was not tested',
   };
 }
 
@@ -194,15 +182,16 @@ export function testEmbeddedKey(targetTokens: number = 10000): ExtractionAttempt
     module.exports = getKey;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
   // Search for the key bytes as a sequence
-  const fullMatch = obfuscated.includes(secret);
+  const fullMatch = hasByteSequence(evidence, keyBytes);
   // Try finding 4+ consecutive bytes
   let partialMatch = false;
   for (let i = 0; i <= keyBytes.length - 4; i++) {
-    const fragment = keyBytes.slice(i, i + 4).join(',');
-    if (obfuscated.includes(fragment)) {
+    const fragment = keyBytes.slice(i, i + 4);
+    if (hasByteSequence(evidence, fragment)) {
       partialMatch = true;
       break;
     }
@@ -220,7 +209,7 @@ export function testEmbeddedKey(targetTokens: number = 10000): ExtractionAttempt
       ? 'FAIL: Full key byte sequence found in output'
       : partialMatch
         ? 'WEAK: Partial key sequence (4+ bytes) found in output'
-        : 'PASS: Key bytes not found as a recognizable sequence',
+        : 'PASS: Key byte sequence absent from constant numeric arrays',
   };
 }
 
@@ -239,11 +228,19 @@ export function testUrlLeak(targetTokens: number = 10000): ExtractionAttempt {
     module.exports = getEndpoint;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
-  const directMatch = obfuscated.includes(secret);
-  const domainMatch = obfuscated.includes('api.internal.example.com');
-  const pathMatch = obfuscated.includes('secret-endpoint');
+  // This is a leakage detector, not URL validation or an allowlist. A URL or
+  // hostname embedded anywhere in a literal is evidence of exposed text,
+  // including inside another host, a query string, or a diagnostic message.
+  // Exact hostname comparison would miss those leaks. Suppress only the
+  // URL-validation rule at these intentional substring searches.
+  // codeql[js/incomplete-url-substring-sanitization]
+  const directMatch = evidence.strings.some(value => value.includes(secret));
+  // codeql[js/incomplete-url-substring-sanitization]
+  const domainMatch = evidence.strings.some(value => value.includes('api.internal.example.com'));
+  const pathMatch = evidence.strings.some(value => value.includes('secret-endpoint'));
 
   return {
     name: 'URL/Endpoint Leak',
@@ -259,7 +256,7 @@ export function testUrlLeak(targetTokens: number = 10000): ExtractionAttempt {
         ? 'WEAK: Domain name found in output'
         : pathMatch
           ? 'WEAK: URL path found in output'
-          : 'PASS: URL fully hidden',
+          : 'PASS: URL absent from parsed literals; runtime decoding was not tested',
   };
 }
 
@@ -273,17 +270,18 @@ export function testRegexLeak(targetTokens: number = 10000): ExtractionAttempt {
   const secret = '^[A-Z]{2}\\d{6}[A-Z]$';
   const code = `
     function validateID(input) {
-      var pattern = new RegExp("${secret}");
+      var pattern = new RegExp(${JSON.stringify(secret)});
       return pattern.test(input);
     }
     module.exports = validateID;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
   // Regex patterns are strings, so they should go through string array
-  const directMatch = obfuscated.includes(secret);
-  const fragmentMatch = obfuscated.includes('[A-Z]') || obfuscated.includes('\\d{6}');
+  const directMatch = evidence.strings.some(value => value.includes(secret));
+  const fragmentMatch = evidence.strings.some(value => value.includes('[A-Z]')) || evidence.strings.some(value => value.includes('\\d{6}'));
 
   return {
     name: 'Regex Pattern Leak',
@@ -297,7 +295,7 @@ export function testRegexLeak(targetTokens: number = 10000): ExtractionAttempt {
       ? 'FAIL: Full regex pattern found in output'
       : fragmentMatch
         ? 'WEAK: Regex fragments found in output'
-        : 'PASS: Regex pattern fully hidden in string array',
+        : 'PASS: Regex absent from parsed literals; runtime decoding was not tested',
   };
 }
 
@@ -322,33 +320,22 @@ export function testControlFlowSignature(targetTokens: number = 10000): Extracti
     module.exports = transform;
   `;
 
-  const obfuscated = obfuscate(code, { targetTokens });
+  const obfuscated = obfuscate(code, { targetTokens, stubConsole: false });
+  const evidence = inspectSource(obfuscated);
 
-  // Check if the operation sequence is preserved in order
-  // In CFF, the operations should be in switch cases with shuffled order
-  const ops = ['+', '*', '-', '^', '<<'];
-  let lastIdx = -1;
-  let inOrder = true;
-  for (const op of ops) {
-    const idx = obfuscated.indexOf(` ${op} `, lastIdx + 1);
-    if (idx === -1 || idx < lastIdx) {
-      inOrder = false;
-      break;
-    }
-    lastIdx = idx;
-  }
+  const inOrder = hasOperatorSequence(evidence, ['+', '*', '-', '^', '<<']);
 
   return {
     name: 'Control Flow Signature',
-    description: 'Function has a distinctive operation sequence (add-mul-sub-xor-shift). Tests if CFF scrambles it.',
+    description: 'Function has a distinctive operation sequence (add-mul-sub-xor-shift). Checks lexical operator order, not recovered control flow.',
     category: 'control-flow',
     originalCode: code,
     obfuscatedCode: obfuscated,
     secret,
     secretExtracted: inOrder,
     extractionDetails: inOrder
-      ? 'WEAK: Operation sequence preserved in original order (CFF may not have applied)'
-      : 'PASS: Operation sequence scrambled by control flow flattening',
+      ? 'WEAK: Operator subsequence visible within a function or program (lexical AST order)'
+      : 'PASS: Static operator subsequence not found; control-flow recovery was not tested',
   };
 }
 
@@ -373,14 +360,14 @@ export function runAllTests(targetTokens: number = 10000): ExtractionAttempt[] {
  * Print a summary of all test results.
  */
 export function printSummary(results: ExtractionAttempt[]): string {
-  const lines: string[] = ['=== Unobfuscatable Function Tests (Paper 1) ===\n'];
+  const lines: string[] = ['=== Unobfuscatable Function Tests: static leakage probes ===\n'];
 
   let passed = 0;
   let failed = 0;
   let weak = 0;
 
   for (const r of results) {
-    const status = r.secretExtracted ? 'EXPOSED' : 'HIDDEN';
+    const status = r.secretExtracted ? 'EVIDENCE FOUND' : 'NOT FOUND BY STATIC PROBE';
     const icon = r.secretExtracted ? '\u2717' : '\u2713';
     lines.push(`${icon} ${r.name}: ${status}`);
     lines.push(`  ${r.extractionDetails}`);

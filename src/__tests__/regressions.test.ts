@@ -146,8 +146,8 @@ describe('regression: number encoding does not emit `--digit`', () => {
   // which tokenizes as the decrement operator on a non-lvalue →
   // SyntaxError: Invalid left-hand side expression in prefix
   // operation. numberEncoding's num() now wraps negatives in
-  // parenthesized unary-minus, plus a post-print regex replaces
-  // leftover `--\d` with `- -\d`. (numberEncoding.ts, obfuscator.ts)
+  // parenthesized unary-minus; the final AST normalization also wraps
+  // nested unary operators before printing. (numberEncoding.ts, obfuscator.ts)
   it('obfuscates negative-heavy arithmetic without decrement tokens', () => {
     const code = `
       function compute() {
@@ -833,15 +833,15 @@ describe('regression: tripwire hash setups do not coerce object params', () => {
   });
 });
 
-describe('regression: minify handles module syntax; fallback never fuses tokens', () => {
+describe('regression: minify handles module syntax without text-based stripping', () => {
   // Terser's minify was called in script mode only, so it threw on
   // module-only syntax (top-level `await`, `import`/`export`, `import.meta`)
   // and fell through to a regex whitespace strip. That strip joined lines with
   // nothing, so a non-block `else` on its own line fused with the next
   // statement: `else\nreturn x` became `elsereturn x` — a SyntaxError that
   // only surfaced on real module bundles (e.g. a dep probing WebCodecs via
-  // top-level await). Terser now retries in module mode first, and the
-  // fallback collapses whitespace to a single space so tokens stay separated.
+  // top-level await). Terser now retries in module mode, and failure in
+  // both modes is reported instead of falling back to text-based stripping.
   const babelParse = (code: string): void => {
     require('@babel/parser').parse(code, {
       sourceType: 'module',

@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import * as estraverse from 'estraverse';
+import { VISITOR_KEYS } from '../visitorKeys';
 import { IdentifierNode, PassHandlerMap } from '../types';
 import { gen } from '../random';
 import { Identifier } from '../ast';
@@ -107,6 +109,25 @@ function hasUseStrictDirective(node: any): boolean {
  */
 function injectDummyParams(node: any): void {
   if (hasRestParam(node)) return;
+  // Default parameters make the arguments object unmapped, even in sloppy
+  // functions. Include nested arrows (which inherit arguments) and eval;
+  // conservatively skipping nested ordinary functions is harmless.
+  let observesArguments = false;
+  if (node.body) estraverse.traverse(node.body, {
+    keys: VISITOR_KEYS,
+    enter(n: any) {
+      if (n.type === 'Identifier' && (n.name === 'arguments' || n.name === 'eval')) {
+        observesArguments = true;
+        return estraverse.VisitorOption.Break;
+      }
+    },
+    fallback: 'iteration',
+  } as any);
+  if (observesArguments) return;
+  // Duplicate simple parameters are legal in sloppy functions, but become
+  // a syntax error when even one default parameter is appended.
+  const simpleNames = node.params.filter((p: any) => p.type === 'Identifier').map((p: any) => p.name);
+  if (new Set(simpleNames).size !== simpleNames.length) return;
   // A "use strict" body can't carry a non-simple parameter list, so leave its
   // arity alone rather than emit invalid syntax.
   if (hasUseStrictDirective(node)) return;

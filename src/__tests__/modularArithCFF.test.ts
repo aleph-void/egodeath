@@ -1,5 +1,7 @@
 import { applyControlFlowFlattening, flattenFunctionBody } from '../transforms/controlFlowFlattening';
 import * as recast from 'recast';
+import * as estraverse from 'estraverse';
+import { VISITOR_KEYS } from '../visitorKeys';
 
 const babelParser = require('../babelParser');
 
@@ -11,6 +13,31 @@ function flatten(code: string, deadCodeMul: number = 1): string {
   const ast = parse(code);
   applyControlFlowFlattening(ast, { deadCodeMultiplier: deadCodeMul });
   return recast.print(ast).code;
+}
+
+function stateAssignments(code: string): number[] {
+  const ast = parse(code);
+  const stateNames = new Set<string>();
+  estraverse.traverse(ast.program, {
+    keys: VISITOR_KEYS,
+    enter(node: any) {
+      if (node.type === 'SwitchStatement' && node.discriminant.operator === '%' &&
+          node.discriminant.left?.operator === '*' && node.discriminant.left.left?.type === 'Identifier') {
+        stateNames.add(node.discriminant.left.left.name);
+      }
+    },
+    fallback: 'iteration',
+  } as any);
+  const values: number[] = [];
+  estraverse.traverse(ast.program, {
+    keys: VISITOR_KEYS,
+    enter(node: any) {
+      if (node.type === 'AssignmentExpression' && stateNames.has(node.left.name) &&
+          node.right.type === 'NumericLiteral') values.push(node.right.value);
+    },
+    fallback: 'iteration',
+  } as any);
+  return values;
 }
 
 function flattenAndEvalWithRetry(
@@ -55,9 +82,8 @@ describe('modular arithmetic state transitions (Paper 3)', () => {
     const out = flatten('function f(x) { var a = x + 1; var b = a * 2; var c = b - 3; return c; }');
     // State assignments: _s = <rawId>
     // Raw IDs are 0-9999, while case values are modular-encoded (>10000)
-    const assignments = out.match(/_s\s*=\s*(\d+)/g);
-    expect(assignments).not.toBeNull();
-    const rawIds = assignments!.map((a: string) => parseInt(a.replace(/_s\s*=\s*/, '')));
+    const rawIds = stateAssignments(out);
+    expect(rawIds.length).toBeGreaterThan(0);
     const allSmall = rawIds.every(v => v <= 10000);
     expect(allSmall).toBe(true);
   });
@@ -66,8 +92,7 @@ describe('modular arithmetic state transitions (Paper 3)', () => {
     const out = flatten('function f(x) { var a = x + 1; var b = a * 2; var c = b - 3; return c; }');
     const caseVals = (out.match(/case (\d+):/g) || []).map((c: string) =>
       parseInt(c.replace('case ', '').replace(':', '')));
-    const assignVals = (out.match(/_s\s*=\s*(\d+)/g) || []).map((a: string) =>
-      parseInt(a.replace(/_s\s*=\s*/, '')));
+    const assignVals = stateAssignments(out);
 
     // The sets should be disjoint (raw IDs != encoded IDs)
     const caseSet = new Set(caseVals);

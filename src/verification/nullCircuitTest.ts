@@ -1,16 +1,13 @@
 /**
- * Null Circuit Test (Paper 10: Bartusek & Malavolta)
- *
- * Tests the quality of our obfuscation by comparing a real obfuscated
- * function against a "null" obfuscated function (one that does nothing).
- * If the two are structurally distinguishable, our dead code injection
- * and transforms have weaknesses that an analyzer could exploit.
- *
- * A high-quality obfuscator should make real and null functions
- * produce similar structural fingerprints after obfuscation.
+ * Structural similarity heuristic for real and null functions. Similar counts
+ * do not establish indistinguishability or resistance to reverse engineering.
  */
 
 import { obfuscate } from '../obfuscator';
+import { parse } from '../babelParser';
+import * as estraverse from 'estraverse';
+import { VISITOR_KEYS } from '../visitorKeys';
+import { isFunctionNode } from './sourceAnalysis';
 
 // ---- Structural metrics ----
 
@@ -22,27 +19,27 @@ import { obfuscate } from '../obfuscator';
 export interface StructuralFingerprint {
   /** Total character count */
   totalChars: number;
-  /** Number of unique tokens (split on whitespace/punctuation) */
+  /** Number of unique parser tokens (excluding comments) */
   uniqueTokens: number;
   /** Ratio of alphanumeric to symbolic characters */
   alphaSymRatio: number;
-  /** Number of function keywords/expressions */
+  /** Number of functions, arrows and methods */
   functionCount: number;
   /** Number of if statements */
   ifCount: number;
-  /** Number of for/while loops */
+  /** Number of loop statements */
   loopCount: number;
   /** Number of return statements */
   returnCount: number;
-  /** Number of variable declarations */
+  /** Number of var/let/const declarations */
   varDeclCount: number;
-  /** Number of assignment operators */
+  /** Number of assignments and initialized declarators */
   assignmentCount: number;
-  /** Number of binary operators */
+  /** Number of binary and logical expressions */
   binaryOpCount: number;
   /** Number of string literals (hex-encoded) in the array */
   stringArraySize: number;
-  /** Average nesting depth (estimated by bracket counting) */
+  /** Average AST depth of statements/declarations (Program is depth zero) */
   avgNestingDepth: number;
   /** Number of eval() calls */
   evalCount: number;
@@ -56,42 +53,47 @@ export interface StructuralFingerprint {
 export function computeFingerprint(code: string): StructuralFingerprint {
   const totalChars = code.length;
 
-  // Token analysis
-  const tokens = code.split(/[\s;,{}()\[\]]+/).filter(t => t.length > 0);
-  const uniqueTokens = new Set(tokens).size;
+  const ast: any = parse(code);
+  const tokens = ast.tokens.filter((token: any) => token.type?.label && token.type.label !== 'eof');
+  const uniqueTokens = new Set(tokens.map((token: any) =>
+    `${token.type.label}:${String(token.value ?? '')}`)).size;
 
-  // Alpha vs symbol ratio
-  const alphaChars = (code.match(/[a-zA-Z0-9]/g) || []).length;
-  const symChars = (code.match(/[^a-zA-Z0-9\s]/g) || []).length;
+  // Retain this surface-size metric, but classify Unicode identifier letters
+  // as letters rather than treating the obfuscator's names as punctuation.
+  const alphaChars = (code.match(/[\p{L}\p{N}]/gu) || []).length;
+  const symChars = (code.match(/[^\p{L}\p{N}\s]/gu) || []).length;
   const alphaSymRatio = symChars > 0 ? alphaChars / symChars : alphaChars;
 
-  // Statement/expression counts
-  const functionCount = (code.match(/function\s*[\w$]*\s*\(/g) || []).length;
-  const ifCount = (code.match(/\bif\s*\(/g) || []).length;
-  const loopCount = (code.match(/\b(for|while)\s*\(/g) || []).length;
-  const returnCount = (code.match(/\breturn\b/g) || []).length;
-  const varDeclCount = (code.match(/\bvar\s/g) || []).length;
-  const assignmentCount = (code.match(/[^!=<>]=[^=]/g) || []).length;
-  const binaryOpCount = (code.match(/[\+\-\*\/\%\&\|\^](?!=)/g) || []).length;
-
-  // String array size (count hex strings)
-  const stringArraySize = (code.match(/"[0-9a-f]{4,}"/g) || []).length;
-
-  // Nesting depth estimation
-  let maxDepth = 0;
-  let currentDepth = 0;
-  let totalDepth = 0;
-  let depthSamples = 0;
-  for (const ch of code) {
-    if (ch === '{' || ch === '(' || ch === '[') { currentDepth++; if (currentDepth > maxDepth) maxDepth = currentDepth; }
-    if (ch === '}' || ch === ')' || ch === ']') { currentDepth = Math.max(0, currentDepth - 1); }
-    if (ch === ';') { totalDepth += currentDepth; depthSamples++; }
-  }
+  let functionCount = 0, ifCount = 0, loopCount = 0, returnCount = 0;
+  let varDeclCount = 0, assignmentCount = 0, binaryOpCount = 0;
+  let stringArraySize = 0, evalCount = 0, switchCaseCount = 0;
+  let depth = -1, totalDepth = 0, depthSamples = 0;
+  estraverse.traverse(ast.program, {
+    keys: VISITOR_KEYS,
+    enter(node: any) {
+      depth++;
+      if (/Statement$|Declaration$/.test(node.type)) {
+        totalDepth += depth;
+        depthSamples++;
+      }
+      if (isFunctionNode(node)) functionCount++;
+      if (node.type === 'IfStatement') ifCount++;
+      if (['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement'].includes(node.type)) loopCount++;
+      if (node.type === 'ReturnStatement') returnCount++;
+      if (node.type === 'VariableDeclaration') varDeclCount++;
+      if (node.type === 'AssignmentExpression' || (node.type === 'VariableDeclarator' && node.init)) assignmentCount++;
+      if (node.type === 'BinaryExpression' || node.type === 'LogicalExpression') binaryOpCount++;
+      if (node.type === 'ArrayExpression') {
+        stringArraySize += node.elements.filter((e: any) =>
+          e?.type === 'StringLiteral' && /^[0-9a-f]{4,}$/i.test(e.value)).length;
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'eval') evalCount++;
+      if (node.type === 'SwitchCase' && node.test !== null) switchCaseCount++;
+    },
+    leave() { depth--; },
+    fallback: 'iteration',
+  } as any);
   const avgNestingDepth = depthSamples > 0 ? totalDepth / depthSamples : 0;
-
-  // Specific pattern counts
-  const evalCount = (code.match(/\beval\s*\(/g) || []).length;
-  const switchCaseCount = (code.match(/\bcase\s/g) || []).length;
 
   return {
     totalChars,
@@ -150,9 +152,7 @@ export function computeSimilarity(a: StructuralFingerprint, b: StructuralFingerp
  * - Has similar control flow (if/else, loops)
  * - Returns undefined (or a constant)
  *
- * The null function should be indistinguishable from a real function
- * after obfuscation. If it is distinguishable, our transforms are
- * leaking information about the code's purpose.
+ * This supplies a structural comparison baseline, not a cryptographic test.
  */
 export function generateNullFunction(
   name: string,
@@ -167,10 +167,11 @@ export function generateNullFunction(
   const declared = new Set<string>();
   for (let i = 0; i < statementCount; i++) {
     const kind = i % 5;
-    const lastVar = declared.size > 0 ? Array.from(declared).pop()! : 'p0';
+    const input = paramCount > 0 ? 'p0' : '0';
+    const lastVar = declared.size > 0 ? Array.from(declared).pop()! : input;
     switch (kind) {
       case 0:
-        stmts.push(`  var v${i} = p0 + ${i + 1};`);
+        stmts.push(`  var v${i} = ${input} + ${i + 1};`);
         declared.add(`v${i}`);
         break;
       case 1:
@@ -180,7 +181,7 @@ export function generateNullFunction(
         stmts.push(`  if (${lastVar} > ${i * 10}) { ${lastVar} = ${lastVar} - ${i}; }`);
         break;
       case 3:
-        stmts.push(`  var v${i} = ${lastVar} + p0;`);
+        stmts.push(`  var v${i} = ${lastVar} + ${input};`);
         declared.add(`v${i}`);
         break;
       case 4:

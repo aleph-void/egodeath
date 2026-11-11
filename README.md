@@ -121,7 +121,7 @@ The obfuscator applies 20 transforms across 4 phases. Each stage builds on the p
 |-------|------|------|-------------|
 | 9 | **Pass 1: Catalog** | `passes/firstPass.ts` | Traverses the AST and catalogs every identifier, building a globals map that assigns each a random 6-16 character Unicode name drawn from 16 script ranges (CJK, Hangul, Greek, Cyrillic, Devanagari, Thai, Arabic, Katakana, etc.). |
 | 10 | **Pass 2: Substitute** | `passes/secondPass.ts` | Replaces all identifier names with their obfuscated Unicode equivalents. Encodes `require()` arguments as `String.fromCharCode(...)`. Encodes static `import`/`export` sources as unicode-escaped string literals. Substitutes class `superClass` references, template literal expressions, destructuring patterns. |
-| 11 | **Pass 3: Dummy Parameters** | `passes/thirdPass.ts` | Injects 0-15 random unused parameters into every function declaration and expression. Skips functions with rest parameters. Strips all comments. |
+| 11 | **Pass 3: Dummy Parameters** | `passes/thirdPass.ts` | Injects 0-15 default-valued unused parameters while preserving arity. Skips rest parameters, strict directives, duplicate parameters, and bodies referencing `arguments` or `eval`. Strips all comments. |
 
 ### Phase 4: Post-transforms
 
@@ -133,7 +133,7 @@ The obfuscator applies 20 transforms across 4 phases. Each stage builds on the p
 | 15 | **Self-Integrity Verification** | `transforms/selfIntegrity.ts` | Injects 2-4 runtime checks: eval native-code verification, `Function.prototype.toString` integrity, timing anomaly detection, code structure validation. Anti-tamper responses: busy wait, throw, silent corruption. *[Paper 10]* |
 | 16 | **String Array Extraction** | `transforms/stringArrayExtraction.ts` | Collects all strings into a single array with **chained XOR decryption** (key for entry N depends on decoded content of entry N-1) and **sparse position-dependent error patterns** (each character gets a different XOR key, with LPN-inspired sparse errors at select positions). The decoder caches the prefix through the requested index and resumes on later calls, leaving unused tail decoys encoded. *[Papers 2, 9]* |
 | 17 | **Console Stubs** | `obfuscator.ts` | Dynamically discovers all `console` methods and sets each to a no-op function. |
-| 18 | **Terser Minification** | `obfuscator.ts` | Strips whitespace/formatting via terser (`mangle: false`, `compress: false`). Falls back to regex-based stripping if terser can't parse the output. |
+| 18 | **Terser Minification** | `obfuscator.ts` | Strips whitespace/formatting via terser (`mangle: false`, `compress: false`). Retries module mode when needed and reports a failure if neither mode can parse the output; never strips source text with regexes. |
 
 ### Dead Code Injection
 
@@ -169,7 +169,7 @@ Two verification tools measure obfuscation quality, located in `src/verification
 
 ### Null Circuit Test (`verification/nullCircuitTest.ts`)
 
-Obfuscates a real function and a "null" function (same shape, does nothing), then compares 14 structural metrics to score how distinguishable they are. Higher similarity = better obfuscation.
+Obfuscates a real function and a "null" function (same shape, does nothing), then compares 14 surface and AST-based structural metrics. Function, statement, operator, array, and nesting counts ignore code-like text in comments and strings. Similarity is a descriptive heuristic, not evidence of indistinguishability or resistance to reverse engineering.
 
 ```ts
 import { runNullCircuitTest } from './verification/nullCircuitTest';
@@ -179,14 +179,14 @@ console.log('Similarity:', result.similarity); // 0.0-1.0
 
 ### Unobfuscatable Function Tests (`verification/unobfuscatableTests.ts`)
 
-7 test cases from Paper 1's impossibility proofs that attempt to extract secrets from obfuscated code:
+7 static leakage probes inspired by obfuscation examples. They inspect parsed literals (including escaped strings), fold constant numeric expressions, look for byte sequences in arrays, and check lexical operator order within each function or program. These are not implementations of Paper 1's impossibility proofs.
 
 ```ts
 import { runAllTests, printSummary } from './verification/unobfuscatableTests';
 console.log(printSummary(runAllTests(10000)));
 ```
 
-Tests: point function (password), magic numbers, canary strings, embedded keys, URLs, regex patterns, control flow signatures.
+Tests: point function (password), magic numbers, canary strings, embedded keys, URLs, regex patterns, control flow signatures. A `PASS` only means that the particular static probe found no evidence. The probes do not run string decoders or reconstruct control flow, and the report does not treat absence of evidence as a hidden secret.
 
 ## Output Size Budget
 
