@@ -1,6 +1,6 @@
 import { ASTNode, GlobalsMap } from './types';
 import { isKeyword } from './keywords';
-import { gen } from './random';
+import { gen, isIssuedName } from './random';
 import { getGlobals, createEntry } from './globals';
 import { getScopeAnalysis } from './scopeAnalysis';
 
@@ -34,6 +34,14 @@ export function substitute(node: ASTNode | null | undefined, ctx?: GlobalsMap): 
       return;
     }
     if (analysis.skipNodes.has(node)) return;
+    // A free reference to a name the input itself used (not one gen()
+    // issued for an injected helper) has no binding anywhere in scope: it is
+    // a host global. Renaming it through the flat map breaks it whenever the
+    // keyword list doesn't know the global — the list comes from Node and
+    // jsdom, which lack many browser APIs (IntersectionObserver,
+    // ResizeObserver, VideoDecoder, AudioContext, …), so
+    // `new IntersectionObserver(cb)` became `new _0xab(cb)` → ReferenceError.
+    if (analysis.freeReferences.has(node) && !isIssuedName(node.name)) return;
     // Free references fall through to the flat-globals path below. A
     // "free reference" here just means "scope analysis didn't find a
     // binding for this Identifier at pass-2 time" — which also covers
