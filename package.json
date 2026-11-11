@@ -29,16 +29,16 @@
     "terser": "^5.51.2"
   },
   "devDependencies": {
-    "@swc/core": "^1.16.20",
+    "@swc/core": "^1.16.22",
     "@swc/jest": "^0.2.39",
     "@types/estraverse": "^5.1.7",
-    "@types/estree": "^1.0.9",
+    "@types/estree": "^1.0.10",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "jest": "^30.5.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "webpack": "^5.112.0",
-    "webpack-cli": "^7.2.3"
+    "webpack-cli": "^7.3.1"
   }
 }

@@ -67,3 +67,48 @@ describe('obfuscate', () => {
     expect(result2).toContain('console');
   });
 });
+
+describe('stubConsole option', () => {
+  // The console stub overwrites console methods with no-ops on the real,
+  // shared console object. That is process-wide, so apps that keep their own
+  // logging need to turn it off.
+  const code = 'module.exports = { run: () => { console.log("hi"); return 1; } };';
+
+  // Returns whether the original console.log survived module load (identity
+  // preserved) — the stub assigns a fresh no-op over every console method.
+  function originalConsoleSurvives(opts: Record<string, unknown>): boolean {
+    const out = obfuscate(code, { targetTokens: 2000, ...opts });
+    const original = (): undefined => undefined;
+    (original as { marker?: boolean }).marker = true;
+    const sandboxConsole: Record<string, unknown> = { log: original };
+    const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
+    runInNewContext(
+      out,
+      { console: sandboxConsole, module: moduleObj, exports: moduleObj.exports, require },
+      { timeout: 1000 },
+    );
+    return (sandboxConsole.log as { marker?: boolean }).marker === true;
+  }
+
+  it('stubs console by default (unchanged behavior)', () => {
+    expect(originalConsoleSurvives({})).toBe(false);
+  });
+
+  it('leaves console untouched when stubConsole is false', () => {
+    expect(originalConsoleSurvives({ stubConsole: false })).toBe(true);
+  });
+
+  it('omits the console-stub prelude from the output', () => {
+    const stubbed = obfuscate(code, { targetTokens: 2000 });
+    const plain = obfuscate(code, { targetTokens: 2000, stubConsole: false });
+    // The stub assigns to console methods; without it there is no such prelude.
+    expect(stubbed).toMatch(/console/);
+    expect(plain).not.toMatch(/console\s*\[/);
+    expect(plain).not.toMatch(/console\.\w+\s*=/);
+  });
+
+  it('does not emit console stubs for an empty program when disabled', () => {
+    expect(obfuscate('', { targetTokens: 2000, stubConsole: false }).trim()).toBe('');
+    expect(obfuscate('', { targetTokens: 2000 })).toMatch(/console/);
+  });
+});

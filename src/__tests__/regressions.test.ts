@@ -880,4 +880,39 @@ describe('regression: minify handles module syntax; fallback never fuses tokens'
     });
     expect(typeof out).toBe('string');
   });
-})
+});
+
+describe('regression: CommonJS module globals __dirname/__filename survive', () => {
+  // `__dirname` and `__filename` are the last two parameters of Node's
+  // CommonJS module wrapper `(exports, require, module, __filename,
+  // __dirname)`. They are free, undeclared, module-scoped variables, so if
+  // the identifier passes rename a reference to them the output throws
+  // `ReferenceError: <renamed> is not defined` the moment the module loads.
+  // This broke real bundler output (e.g. `path.join(__dirname, 'x')`).
+  function runWithModuleWrapper(code: string): any {
+    const out = obfuscate(code, { targetTokens: 2000 });
+    const moduleObj: any = { exports: {} };
+    // Mirror Node's real wrapper argument list.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function(
+      'exports', 'require', 'module', '__filename', '__dirname', out,
+    );
+    fn(moduleObj.exports, require, moduleObj, '/real/file.js', '/real', );
+    return moduleObj.exports;
+  }
+
+  it('does not rename __dirname or __filename', () => {
+    const code = `
+      const path = require('path');
+      module.exports = {
+        dir: __dirname,
+        file: __filename,
+        joined: path.join(__dirname, 'sub', 'thing.json'),
+      };
+    `;
+    const mod = retry(() => runWithModuleWrapper(code), 3);
+    expect(mod.dir).toBe('/real');
+    expect(mod.file).toBe('/real/file.js');
+    expect(mod.joined).toBe('/real/sub/thing.json');
+  });
+});

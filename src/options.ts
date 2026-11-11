@@ -57,10 +57,25 @@ export interface ObfuscateOptions {
    * sharing is a cross-file property by definition.
    */
   shareIdentifiers?: boolean;
+
+  /**
+   * Console suppression. When `true` (the default), the obfuscator prepends a
+   * block that discovers every `console` method and overwrites it with a no-op,
+   * hiding any logging the source performs.
+   *
+   * Because that block assigns to the real, shared `console` object at module
+   * load, it silences `console` for the ENTIRE process — including other
+   * modules and anything layered on top of `console` (e.g. loggers that wrap
+   * it). In an app that keeps its console/logging, set this to `false`.
+   *
+   * Default: `true` (unchanged behavior).
+   */
+  stubConsole?: boolean;
 }
 
 export const DEFAULT_OPTIONS: ObfuscateOptions = {
   targetTokens: 2_000_000,
+  stubConsole: true,
 };
 
 /**

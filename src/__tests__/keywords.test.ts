@@ -14,6 +14,9 @@ describe('isKeyword', () => {
     expect(isKeyword('require')).toBe(true);
     expect(isKeyword('module')).toBe(true);
     expect(isKeyword('exports')).toBe(true);
+    // CommonJS module-wrapper globals — must never be renamed.
+    expect(isKeyword('__dirname')).toBe(true);
+    expect(isKeyword('__filename')).toBe(true);
   });
 
   it('recognizes window and console', () => {
