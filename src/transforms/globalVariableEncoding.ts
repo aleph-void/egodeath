@@ -2,6 +2,7 @@ import { randomSuffix, escapeRegex } from '../transformHelpers';
 import { VISITOR_KEYS } from '../visitorKeys';
 import * as estraverse from 'estraverse';
 import { captureGlobal } from '../capturedGlobals';
+import { isLiteralNamePosition } from '../ast';
 
 // ---- Globals to encode ----
 
@@ -59,6 +60,22 @@ function buildEvalReplace(ast: any, globalName: string): any {
 function isGlobalReference(node: any, parent: any): boolean {
   // Property of a member expression: obj.Math → don't touch "Math"
   if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) {
+    return false;
+  }
+  // Any non-computed member name — object/class method, getter/setter,
+  // class field (`{ Math() {} }`, `class { static JSON = 1 }`) — in both Babel
+  // and ESTree shapes. Replacing the name with `eval(...)` is a SyntaxError.
+  if (isLiteralNamePosition(node, parent)) {
+    return false;
+  }
+  // Babel puts method params directly on ClassMethod/ObjectMethod (ESTree
+  // nests a FunctionExpression, handled below): `run(Math) {}`.
+  if ((parent.type === 'ClassMethod' || parent.type === 'ClassPrivateMethod' ||
+       parent.type === 'ObjectMethod') && parent.params && parent.params.includes(node)) {
+    return false;
+  }
+  // Label uses: `break Math;` / `continue Math;` name a label, not a global.
+  if ((parent.type === 'BreakStatement' || parent.type === 'ContinueStatement') && parent.label === node) {
     return false;
   }
   // Property key in object: { Math: val } → don't touch

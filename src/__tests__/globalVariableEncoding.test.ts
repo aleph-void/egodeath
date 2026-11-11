@@ -154,6 +154,37 @@ describe('applyGlobalVariableEncoding', () => {
   });
 });
 
+describe('regression: global-named members, params and labels (Babel node shapes)', () => {
+  // isGlobalReference only knew ESTree's MethodDefinition. egodeath parses
+  // with Babel, so object/class method names, getters and class fields
+  // (ObjectMethod / ClassMethod / ClassProperty), params on ClassMethod /
+  // ObjectMethod, and `break Math` / `continue Math` were rewritten to
+  // eval(...): SyntaxErrors at ratio > 10
+  // (e.g. `eval(…)(x = 1) { this.… }` for a class method named after a
+  // global).
+  const runReturning = (code: string, expr: string): unknown => {
+    const out = transform(code);
+    return new Function(out + '\nreturn (' + expr + ');')();
+  };
+
+  it.each([
+    ['object method / getter names', 'var o = { Math(x) { return "m" + x; }, get JSON() { return "j"; } };', '[o.Math(1), o.JSON]', ['m1', 'j']],
+    ['class method / static method names', 'class C { Math(x) { return "m" + x; } static Date() { return "d"; } }', '[new C().Math(2), C.Date()]', ['m2', 'd']],
+    ['class field names', 'class C { Math = 3; static JSON = "j"; }', '[new C().Math, C.JSON]', [3, 'j']],
+    ['class / object method params', 'class C { run(Math) { return Math + 1; } } var o = { go(JSON) { return JSON * 2; } };', '[new C().run(4), o.go(5)]', [5, 10]],
+    ['break / continue labels', 'var n = 0; Math: for (var i = 0; i < 3; i++) { for (;;) { n++; continue Math; } } JSON: { n += 10; break JSON; }', '[n]', [13]],
+  ])('leaves %s alone and runs correctly', (_label, code, expr, expected) => {
+    expect(() => parse(transform(code))).not.toThrow();
+    expect(runReturning(code, expr)).toEqual(expected);
+  });
+
+  it('still encodes real global references inside those members', () => {
+    const out = transform('class C { Math(x) { return Math.max(x, 1); } }');
+    expect(out).toContain('eval(');
+    expect(new Function(out + '\nreturn new C().Math(5);')()).toBe(5);
+  });
+});
+
 describe('global encoding functional correctness', () => {
   it('eval/replace resolves Math correctly', () => {
     const out = transform('var x = Math.floor(1.7);');
