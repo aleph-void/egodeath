@@ -2,20 +2,48 @@
   "name": "egodeath",
   "version": "1.0.0",
   "description": "JavaScript obfuscator",
+  "keywords": [
+    "obfuscator",
+    "obfuscation",
+    "javascript",
+    "minify",
+    "anti-reverse-engineering"
+  ],
+  "homepage": "https://github.com/aleph-void/egodeath#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aleph-void/egodeath.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aleph-void/egodeath/issues"
+  },
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "egodeath": "dist/cli.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/obfuscated",
+    "!dist/__tests__"
+  ],
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/cli.js",
     "test": "jest",
-    "obfuscate": "node dist/index.js",
+    "obfuscate": "node dist/cli.js",
     "obfuscate-package": "tsx --tsconfig tools/tsconfig.json tools/obfuscate-package.ts",
     "benchmark": "tsx --tsconfig tools/tsconfig.json tools/benchmark.ts",
     "detect-obfuscation": "tsx --tsconfig tools/tsconfig.json tools/obfuscation-detection-test.ts",
     "adversarial-test": "tsx --tsconfig tools/tsconfig.json tools/adversarial-test.ts",
     "benchmark:transforms": "npm run build && node tools/benchmark-transforms.js",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc --noEmit -p tools/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc --noEmit -p tools/tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run typecheck && npm test"
   },
-  "author": "",
+  "author": "nstarke",
   "license": "MIT",
   "engines": {
     "node": "^24.15.0 || ^26.0.0"
