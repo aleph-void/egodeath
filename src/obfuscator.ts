@@ -33,6 +33,7 @@ import { applyNoiseInjection } from './transforms/noiseInjection';
 import { applySelfIntegrity } from './transforms/selfIntegrity';
 import { applyRegexEncoding } from './transforms/regexEncoding';
 import { applyTemplateLiteralFlattening } from './transforms/templateLiteralFlattening';
+import { applyTaggedTemplateLowering } from './transforms/taggedTemplateLowering';
 import { ObfuscateOptions, DEFAULT_OPTIONS, computeBloatBudget } from './options';
 import { setDonorStatements, clearDonorStatements } from './transforms/deadCodeInjection';
 import { setStringArrayDecoys, clearStringArrayDecoys } from './transforms/stringArrayExtraction';
@@ -227,6 +228,13 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
     const count = (recast.print(ast).code.match(/=\s*RegExp\b/g) || []).length;
     process.stderr.write('[after regexEnc] RegExp count: ' + count + '\n');
   }
+
+  // Tagged templates the final Terser pass cannot round-trip — invalid
+  // escapes such as String.raw`\u{` (Terser's tokenizer rejects them) and
+  // optional-chain tags such as (o?.tag)`x` (Terser drops the parentheses)
+  // — become equivalent calls with a cached template object. Runs before
+  // stringArrayExtraction so the cooked/raw strings get encoded too.
+  applyTaggedTemplateLowering(ast);
 
   // Template literal flattening: rewrite `foo ${x} bar` into
   // "foo " + `${x}` + " bar" so the quasi strings land as plain

@@ -133,7 +133,7 @@ The obfuscator applies 20 transforms across 4 phases. Each stage builds on the p
 | 15 | **Self-Integrity Verification** | `transforms/selfIntegrity.ts` | Injects 2-4 runtime checks: eval native-code verification, `Function.prototype.toString` integrity, timing anomaly detection, code structure validation. Anti-tamper responses: busy wait, throw, silent corruption. *[Paper 10]* |
 | 16 | **String Array Extraction** | `transforms/stringArrayExtraction.ts` | Collects all strings into a single array with **chained XOR decryption** (key for entry N depends on decoded content of entry N-1) and **sparse position-dependent error patterns** (each character gets a different XOR key, with LPN-inspired sparse errors at select positions). The decoder caches the prefix through the requested index and resumes on later calls, leaving unused tail decoys encoded. *[Papers 2, 9]* |
 | 17 | **Console Stubs** | `obfuscator.ts` | Dynamically discovers all `console` methods and sets each to a no-op function. |
-| 18 | **Terser Minification** | `obfuscator.ts` | Strips whitespace/formatting via terser (`mangle: false`, `compress: false`). Retries module mode when needed and reports a failure if neither mode can parse the output; never strips source text with regexes. |
+| 18 | **Terser Minification** | `obfuscator.ts` | Strips whitespace/formatting via terser (`mangle: false`, `compress: false`). Retries module mode when needed and reports a failure if neither mode can parse the output; never strips source text with regexes. Tagged templates Terser cannot round-trip (invalid escapes such as ``String.raw`\u{` ``, optional-chain tags such as ``(o?.tag)`x` ``) are first lowered by `transforms/taggedTemplateLowering.ts` to equivalent calls with a cached, frozen template object. |
 
 ### Dead Code Injection
 
@@ -233,6 +233,7 @@ src/
     numberEncoding.ts         11 bitwise/arithmetic encoding strategies
     selfIntegrity.ts          Anti-tamper runtime checks [Paper 10]
     stringArrayExtraction.ts  Chained XOR + sparse position errors [Papers 2, 9]
+    taggedTemplateLowering.ts Tagged templates Terser cannot print → cached template-object calls
     deadCodeInjection.ts      Template + mutation-based dead code [Paper 3]
   verification/
     nullCircuitTest.ts        Dead code quality scoring [Paper 10]

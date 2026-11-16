@@ -262,3 +262,42 @@ describe('applyClosedObjectRename — end-to-end obfuscate', () => {
     expect(mod.exports.r).toBe(101);
   });
 });
+
+describe('applyClosedObjectRename — method calls bind `this` (issue #40)', () => {
+  it.each([
+    // A function defined elsewhere, stored on the object and called as a method.
+    'const base = { hi() { return this.tag; } }; const other = { tag: 1, hi: base.hi }; other.hi();',
+    'function hi() { return this.tag; } const other = { tag: 1, hi }; other.hi();',
+    'function hi() { return this.tag; } const other = { tag: 1, hi }; (other.hi)();',
+    'function hi() { return this.tag; } const other = { tag: 1, hi }; other?.hi();',
+    'function hi() { return this.tag; } const other = { tag: 1, hi }; other.hi`x`;',
+    'const hi = function () { return this.tag; }; const other = { tag: 1, hi }; other.hi();',
+    // Any value we cannot see through: call results, parameters, globals.
+    'function f(fn) { const other = { tag: 1, hi: fn }; return other.hi(); }',
+    'const other = { tag: 1, hi: makeFn() }; other.hi();',
+    'const other = { tag: 1, hi: someGlobal }; other.hi();',
+    // `this` reachable through super or a direct eval.
+    'function hi() { return eval("this.tag"); } const other = { tag: 1, hi }; other.hi();',
+    // The binding or the key is reassigned.
+    'function hi() { return 1; } const other = { tag: 1, hi }; other.hi = function () { return this.tag; }; other.hi();',
+    'let hi = () => 1; hi = function () { return this.tag; }; const other = { tag: 1, hi }; other.hi();',
+    'var hi = () => 1; var hi = function () { return this.tag; }; const other = { tag: 1, hi }; other.hi();',
+    // Called but not declared: an inherited method (receives `this`).
+    'const other = { tag: 1 }; other.__defineGetter__("t", function () { return this.tag; }); other.t;',
+  ])('bails: %s', code => {
+    expect(runTransform(code).renamed).toBe(0);
+  });
+
+  it.each([
+    'const other = { tag: 1, hi: () => 2 }; other.hi();',
+    'function hi() { return 2; } const other = { tag: 1, hi }; other.hi();',
+    'function hi() { return function () { return this; }; } const other = { tag: 1, hi }; other.hi();',
+    'const hi = () => 2; const other = { tag: 1, hi }; other.hi();',
+    'const hi = function () { return 2; }; const other = { tag: 1, hi }; other.hi();',
+    // Not a method call: the borrowed function runs with `this` undefined.
+    'const base = { hi() { return this.tag; } }; const other = { tag: 1, hi: base.hi }; (0, other.hi)();',
+    'const base = { hi() { return this.tag; } }; const other = { tag: 1, hi: base.hi }; const h = other.hi; h();',
+  ])('still renames provably this-free callees: %s', code => {
+    expect(runTransform(code).renamed).toBe(1);
+  });
+});

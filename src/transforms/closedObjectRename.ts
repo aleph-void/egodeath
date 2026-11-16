@@ -33,6 +33,17 @@ import { ScopeAnalysis } from '../scopeAnalysis';
  *     and analyzing that is deferred. ArrowFunctionExpression values
  *     are fine (arrows have no own `this`) — any `obj`-by-closure
  *     reference inside an arrow goes through the normal escape check.
+ *   - Every method-style call through the binding (`obj.f()`,
+ *     `obj?.f()`, `(obj.f)()`, `` obj.f`…` ``) runs with `this === obj`,
+ *     so `this.X` inside the callee would still read the old key. Such a
+ *     call is accepted only when `f` is provably `this`-free: the
+ *     declaration defines `f` and nothing else ever writes `obj.f`, and
+ *     its value is a primitive literal, an arrow function, or an
+ *     identifier bound exactly once (never reassigned) to an arrow
+ *     function or to a function whose body never uses `this`, `super` or
+ *     direct `eval`. Any other value — a member expression such as
+ *     `hi: obj.hi`, a call result, a parameter — could be a function
+ *     defined elsewhere that reads `this.X`, so the candidate is dropped.
  *   - Every reference to the binding is the `.object` of a non-computed
  *     MemberExpression / OptionalMemberExpression. Anything else —
  *     return statement, call argument, aliasing assignment, spread,
@@ -63,11 +74,174 @@ const SKIP_PROPS = new Set<string>([
   'then', 'catch', 'finally',
 ]);
 
+type AccessKind = 'read' | 'write' | 'call';
+
 interface Candidate {
   declarator: any;    // VariableDeclarator whose .init is the object literal
   objExpr: any;       // the ObjectExpression
-  accesses: Array<{ memberNode: any; propName: string }>;
+  accesses: Array<{ memberNode: any; propName: string; kind: AccessKind }>;
   safe: boolean;
+}
+
+/** What we know about a binding when an object property value names it. */
+interface BindingInfo {
+  decls: Array<{ node: any; kind: string }>; // FunctionDeclaration or VariableDeclarator (+ var/let/const)
+  written: boolean;   // reassigned, or bound by some other form (param, catch, import, class, pattern)
+}
+
+/** Nearest ancestor that is not a ParenthesizedExpression, with the child it was reached from. */
+function effectiveParent(node: any, ancestors: any[]): { parent: any; child: any; index: number } {
+  let child = node;
+  let i = ancestors.length - 1;
+  while (i >= 0 && ancestors[i].type === 'ParenthesizedExpression') {
+    child = ancestors[i];
+    i--;
+  }
+  return { parent: i >= 0 ? ancestors[i] : null, child, index: i };
+}
+
+/**
+ * True when `node` (an Identifier or MemberExpression) sits in a position
+ * that assigns to it: assignment/update target, `delete` operand,
+ * for-in/of head, or any destructuring-pattern slot.
+ */
+function isWritePosition(node: any, ancestors: any[]): boolean {
+  const { parent, child, index } = effectiveParent(node, ancestors);
+  if (!parent) return false;
+  switch (parent.type) {
+    case 'AssignmentExpression':
+    case 'AssignmentPattern':
+      return parent.left === child;
+    case 'UpdateExpression':
+      return true;
+    case 'UnaryExpression':
+      return parent.operator === 'delete';
+    case 'ForInStatement':
+    case 'ForOfStatement':
+      return parent.left === child;
+    case 'ArrayPattern':
+    case 'RestElement':
+      return true;
+    case 'ObjectProperty':
+    case 'Property': {
+      const gp = index > 0 ? ancestors[index - 1] : null;
+      return !!gp && gp.type === 'ObjectPattern' && parent.value === child;
+    }
+    default:
+      return false;
+  }
+}
+
+/** True when `member` is invoked as a method, so the callee runs with `this` = its object. */
+function isMethodCallPosition(member: any, ancestors: any[]): boolean {
+  const { parent, child } = effectiveParent(member, ancestors);
+  if (!parent) return false;
+  if (parent.type === 'CallExpression' || parent.type === 'OptionalCallExpression') {
+    return parent.callee === child;
+  }
+  if (parent.type === 'TaggedTemplateExpression') return parent.tag === child;
+  return false;
+}
+
+/**
+ * True when a function body (params included) can never observe its
+ * `this`: no ThisExpression or Super outside nested `function`s (which
+ * rebind `this`), and no direct `eval(…)` that could read it.
+ * Conservative: object/class methods are not treated as boundaries.
+ */
+function isThisFreeFunction(fn: any): boolean {
+  let clean = true;
+  const visit = (root: any) => estraverse.traverse(root, {
+    keys: EXTRA_VISITOR_KEYS,
+    enter(n: any): any {
+      if (n.type === 'FunctionExpression' || n.type === 'FunctionDeclaration') {
+        return (estraverse as any).VisitorOption.Skip;
+      }
+      if (
+        n.type === 'ThisExpression' || n.type === 'Super' ||
+        (n.type === 'CallExpression' && n.callee && n.callee.type === 'Identifier' && n.callee.name === 'eval')
+      ) {
+        clean = false;
+        return (estraverse as any).VisitorOption.Break;
+      }
+    },
+    fallback: 'iteration',
+  } as any);
+  for (const p of fn.params || []) if (clean) visit(p);
+  if (clean && fn.body) visit(fn.body);
+  return clean;
+}
+
+const PRIMITIVE_LITERALS = new Set([
+  'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'BigIntLiteral', 'Literal',
+]);
+
+/**
+ * True when calling the value as `obj.key()` provably cannot read `obj`
+ * through `this` (calling a primitive just throws).
+ */
+function isThisFreeCallee(value: any, analysis: ScopeAnalysis, bindings: Map<string, BindingInfo>): boolean {
+  if (!value) return false;
+  if (PRIMITIVE_LITERALS.has(value.type)) return true;
+  if (value.type === 'ArrowFunctionExpression') return true;
+  if (value.type !== 'Identifier') return false;
+  const render = analysis.resolvedNames.get(value);
+  if (!render) return false; // global / unresolved: could be anything
+  const info = bindings.get(render);
+  if (!info || info.written || info.decls.length !== 1) return false;
+  const { node, kind } = info.decls[0];
+  if (node.type === 'FunctionDeclaration') return isThisFreeFunction(node);
+  if (node.type === 'VariableDeclarator' && kind === 'const' && node.init) {
+    if (node.init.type === 'ArrowFunctionExpression') return true;
+    if (node.init.type === 'FunctionExpression') return isThisFreeFunction(node.init);
+  }
+  return false;
+}
+
+/**
+ * Map every resolved binding to its declarations, and flag bindings that
+ * are ever written or bound by a form we don't model.
+ */
+function collectBindings(ast: any, analysis: ScopeAnalysis): Map<string, BindingInfo> {
+  const bindings = new Map<string, BindingInfo>();
+  const get = (render: string) => {
+    let info = bindings.get(render);
+    if (!info) { info = { decls: [], written: false }; bindings.set(render, info); }
+    return info;
+  };
+  estraverse.traverse(ast.program, {
+    keys: EXTRA_VISITOR_KEYS,
+    enter(this: any, node: any, parent: any) {
+      if (node.type !== 'Identifier') return;
+      const render = analysis.resolvedNames.get(node);
+      if (!render) return;
+      if (!parent) return;
+      if (parent.type === 'FunctionDeclaration' && parent.id === node) {
+        get(render).decls.push({ node: parent, kind: 'function' });
+        return;
+      }
+      if (parent.type === 'VariableDeclarator' && parent.id === node) {
+        const ancestors = this.parents();
+        const declaration = ancestors[ancestors.length - 2];
+        get(render).decls.push({ node: parent, kind: declaration ? declaration.kind : 'var' });
+        return;
+      }
+      const isParam =
+        (parent.type === 'FunctionDeclaration' || parent.type === 'FunctionExpression' ||
+         parent.type === 'ArrowFunctionExpression' || parent.type === 'ObjectMethod' ||
+         parent.type === 'ClassMethod' || parent.type === 'ClassPrivateMethod') &&
+        (parent.params || []).includes(node);
+      const otherBinding =
+        isParam ||
+        (parent.type === 'FunctionExpression' && parent.id === node) ||
+        (parent.type === 'CatchClause' && parent.param === node) ||
+        ((parent.type === 'ClassDeclaration' || parent.type === 'ClassExpression') && parent.id === node) ||
+        /^Import.*Specifier$/.test(parent.type);
+      if (otherBinding || isWritePosition(node, this.parents())) get(render).written = true;
+    },
+    fallback: 'iteration',
+  } as any);
+  return bindings;
 }
 
 /**
@@ -164,7 +338,7 @@ export function applyClosedObjectRename(ast: any, analysis: ScopeAnalysis): numb
   // Step 2: examine every reference. Any non-`obj.X` context disqualifies.
   estraverse.traverse(ast.program, {
     keys: EXTRA_VISITOR_KEYS,
-    enter(node: any, parent: any) {
+    enter(this: any, node: any, parent: any) {
       if (node.type !== 'Identifier') return;
       const render = analysis.resolvedNames.get(node);
       if (!render) return;
@@ -187,7 +361,12 @@ export function applyClosedObjectRename(ast: any, analysis: ScopeAnalysis): numb
           cand.safe = false;
           return;
         }
-        cand.accesses.push({ memberNode: parent, propName: pname });
+        // this.parents() ends with `parent`; drop it to get the member's ancestors.
+        const memberAncestors = this.parents().slice(0, -1);
+        const kind: AccessKind = isMethodCallPosition(parent, memberAncestors)
+          ? 'call'
+          : isWritePosition(parent, memberAncestors) ? 'write' : 'read';
+        cand.accesses.push({ memberNode: parent, propName: pname, kind });
         return;
       }
 
@@ -199,7 +378,34 @@ export function applyClosedObjectRename(ast: any, analysis: ScopeAnalysis): numb
     fallback: 'iteration',
   } as any);
 
-  // Step 3: rewrite keys + accesses for surviving candidates.
+  // Step 3: method calls through the binding run the callee with
+  // `this === obj`. Renaming is only sound when every such callee is
+  // provably `this`-free (see the header comment).
+  let bindings: Map<string, BindingInfo> | null = null;
+  for (const cand of candidates.values()) {
+    if (!cand.safe) continue;
+    const called = new Set<string>();
+    const written = new Set<string>();
+    for (const a of cand.accesses) {
+      if (a.kind === 'call') called.add(a.propName);
+      else if (a.kind === 'write') written.add(a.propName);
+    }
+    if (called.size === 0) continue;
+    if (!bindings) bindings = collectBindings(ast, analysis);
+    for (const name of called) {
+      const props = cand.objExpr.properties.filter((p: any) => extractKeyName(p) === name);
+      if (
+        written.has(name) ||
+        props.length === 0 ||
+        !props.every((p: any) => isThisFreeCallee(p.value, analysis, bindings!))
+      ) {
+        cand.safe = false;
+        break;
+      }
+    }
+  }
+
+  // Step 4: rewrite keys + accesses for surviving candidates.
   let renamedCount = 0;
   for (const cand of candidates.values()) {
     if (!cand.safe) continue;
