@@ -8,6 +8,22 @@ function parse(code: string): any {
   return recast.parse(code, { parser: babelParser });
 }
 
+const SHAPE_SKIP_KEYS = new Set([
+  'loc', 'start', 'end', 'extra', 'comments', 'leadingComments',
+  'trailingComments', 'innerComments', 'tokens', 'original',
+]);
+
+/** Node types and nesting only: ignores names, literal values and operators. */
+function astShape(node: any): string {
+  if (Array.isArray(node)) return '[' + node.map(astShape).join(',') + ']';
+  if (!node || typeof node !== 'object' || !node.type) return '';
+  const children = Object.keys(node)
+    .filter(k => !SHAPE_SKIP_KEYS.has(k) && node[k] && typeof node[k] === 'object')
+    .sort()
+    .map(k => k + ':' + astShape(node[k]));
+  return node.type + (node.kind ? '/' + node.kind : '') + '{' + children.join(';') + '}';
+}
+
 function stmtsToCode(stmts: any[]): string {
   const ast = { type: 'File', program: { type: 'Program', body: stmts } };
   return recast.print(ast).code;
@@ -139,25 +155,40 @@ describe('cross-file dead code mutation', () => {
     clearDonorStatements();
   });
 
-  it('dead code generation uses cross-file donors', () => {
-    const donorAst = parse(`
-      var prefix = "Hello";
-      var msg = prefix + " world";
-      var len = msg.length;
-    `);
-    setDonorStatements(donorAst.program.body);
+  // A mutated donor keeps the donor's AST structure but changes every name,
+  // literal and operator (e.g. `+` always becomes `-`), so the generated code
+  // is identified by its node-type skeleton, not its text. The last donor's
+  // shape (an object literal holding an array) is one no template produces.
+  // generateDeadCode mutates donors only ~50% of the time, and the 2-4
+  // statement slice includes that donor ~60% of those times, so the loop
+  // finds it within 100 tries except with probability ~1e-16.
+  const DONOR_SRC = `
+    var prefix = "Hello";
+    var msg = prefix + " world";
+    var len = msg.length;
+    var greeting = { text: msg, size: len, tags: [prefix, "!"] };
+  `;
 
-    let usedDonors = false;
-    for (let i = 0; i < 50; i++) {
-      const dead = generateDeadCode([]);
-      const code = stmtsToCode(dead);
-      // Mutation of string donors will produce var decls with string concat patterns
-      if (code.includes('var ') && code.includes('+') && code.includes('"')) {
-        usedDonors = true;
-        break;
+  function producesDonorShape(withDonors: boolean): boolean {
+    const donors = parse(DONOR_SRC).program.body;
+    const target = astShape(donors[donors.length - 1]);
+    if (withDonors) setDonorStatements(donors);
+    try {
+      for (let i = 0; i < 100; i++) {
+        if (generateDeadCode([]).some((s: any) => astShape(s) === target)) return true;
       }
+      return false;
+    } finally {
+      clearDonorStatements();
     }
-    expect(usedDonors).toBe(true);
+  }
+
+  it('dead code generation uses cross-file donors', () => {
+    expect(producesDonorShape(true)).toBe(true);
+  });
+
+  it('templates alone never produce the donor shape (control)', () => {
+    expect(producesDonorShape(false)).toBe(false);
   });
 
   it('single-file obfuscate does not use stale donor pool', () => {
