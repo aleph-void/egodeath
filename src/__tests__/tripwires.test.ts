@@ -53,15 +53,21 @@ describe('applyTripwires', () => {
   });
 
   it('uses unique secrets for each injection', () => {
+    // Injection is ~20% per function, so a fixed 50-run loop saw fewer than
+    // 4 injections about 0.6% of the time. Collect a fixed number of
+    // injections instead (P(fewer than 10 in 2000 runs) is negligible).
     const secrets = new Set<string>();
-    for (let i = 0; i < 50; i++) {
+    let injections = 0;
+    for (let i = 0; i < 2000 && injections < 10; i++) {
       const out = transform('function f(x, y) { var a = x + y; var b = a * 2; return b; }');
       const match = out.match(/===\s*(\d+)/g);
       if (match) {
+        injections++;
         match.forEach(m => secrets.add(m));
       }
     }
-    // Should see multiple different secret values across runs
+    expect(injections).toBe(10);
+    // Each injection draws a fresh 31-bit secret
     expect(secrets.size).toBeGreaterThan(3);
   });
 
