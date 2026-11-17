@@ -3,6 +3,14 @@
  */
 export interface ObfuscateOptions {
   /**
+   * Generate helpers compatible with CSP that forbids string code generation.
+   * Uses literal debugger traps, skips eval-based global encoding and the
+   * eval-native integrity probe. Other transforms keep the same budget gates.
+   * Does not make source-provided eval/Function/string timers CSP-compatible.
+   * Default: false, preserving the existing output profile.
+   */
+  cspSafe?: boolean;
+  /**
    * Target output size in tokens. Transforms will throttle to stay
    * near this budget. Default: 2_000_000 (2 million tokens).
    *

@@ -93,6 +93,58 @@ const obfuscated = obfuscate(code);
 const obfuscated = obfuscate(code, { targetTokens: 500000 });
 ```
 
+## Strict CSP / Manifest V3
+
+Use the explicit opt-in CSP-safe profile when the output must run without string
+code generation (for example, a Manifest V3 popup or service worker):
+
+```js
+const { obfuscate } = require('egodeath');
+const ratio = 30;
+const output = obfuscate(sourceCode, {
+  targetTokens: Math.ceil(sourceCode.length * ratio / 4),
+  cspSafe: true,
+  stubConsole: false,
+});
+```
+
+```bash
+npx egodeath --csp-safe --no-console-stub --target-tokens 30000 input.js > output.js
+```
+
+`cspSafe` is also accepted by `obfuscateMultiple`. It is false by default, so
+existing callers keep the original profile. Ratio 30 is a budget heuristic:
+`targetTokens * 4 / input.length`, not an exact output-size multiplier or security
+level. Rounding the token count can make the ratio slightly larger than 30.
+
+The profile keeps the same budget and compatible transforms:
+
+- Identifier and closed-object/class renaming, dummy parameters, and comment removal.
+- Control-flow flattening, dead code, opaque predicates, proxy dispatchers, context
+  padding, comma merging, arithmetic noise, and tripwires.
+- Property, number, regex, template, and chained string-array encoding.
+- Anti-debug traps and timers use literal `debugger` statements instead of
+  evaluating encoded debugger strings. Debugger traps are consequently easier to
+  recognize; they can still pause execution when developer tools are attached.
+- Timing and function `toString` integrity probes remain. The eval-native probe
+  is omitted, and the global-variable eval-encoding transform is skipped. Global
+  identifiers therefore remain visible; their lexical lookup behavior is kept.
+
+This mode changes **generated helpers**, not source semantics. Source-provided
+`eval`, `Function` constructors, or string timers remain incompatible with strict
+CSP. Do not treat this as a sanitizer or a promise that arbitrary inputs run in an
+extension. It does not change a manifest, add `unsafe-eval`, or lower the budget.
+Use `stubConsole: false` / `--no-console-stub` when sharing a runtime with libraries
+whose logging should remain available. Existing integrity/tripwire behavior and
+performance tradeoffs still apply.
+
+Validation includes ratio-30 execution with Node VM string code generation
+disabled, delayed timer callbacks, lexical shadowing, ESM imports/live exports,
+batch and CLI entry points. A manual Chromium Manifest V3 smoke check of the generated
+profile also passed without `unsafe-eval`; applications should test their own final
+bundle because source callbacks serialized into another execution context must
+remain self-contained.
+
 ## Transform Pipeline
 
 The obfuscator applies 20 transforms across 4 phases. Each stage builds on the previous one.
