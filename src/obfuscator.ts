@@ -131,7 +131,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // Anti-debugging: inject eval("debugger") traps and setInterval loops.
   // Runs before all other transforms so debugger strings get encoded.
   if (budget.maxBloatRatio > 3) {
-    applyAntiDebug(ast);
+    applyAntiDebug(ast, opts.cspSafe);
   }
 
   // Punctured program tripwires (Paper 4: Sahai & Waters)
@@ -204,7 +204,9 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
 
   // Post-transforms are gated on budget — they add significant volume
   // through string generation (each property/global adds 2+ strings to the array)
-  if (budget.maxBloatRatio > 10) {
+  if (budget.maxBloatRatio > 10 && !opts.cspSafe) {
+    // CSP-safe mode preserves lexical global lookup; globalThis[name] is not
+    // equivalent for missing globals, shadowing, or lexical global bindings.
     // Post-transform: global variable encoding
     applyGlobalVariableEncoding(ast);
   }
@@ -258,7 +260,7 @@ export function obfuscate(code: string, options?: Partial<ObfuscateOptions>): st
   // Checks that eval, toString, and code structure haven't been tampered with.
   // Runs after all transforms so it checks the final obfuscated form.
   if (budget.maxBloatRatio > 5) {
-    applySelfIntegrity(ast);
+    applySelfIntegrity(ast, opts.cspSafe);
   }
 
   if (process.env.EGODEATH_DEBUG_REGEXP) {

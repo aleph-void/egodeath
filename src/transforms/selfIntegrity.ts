@@ -213,7 +213,7 @@ function buildTamperResponse(): any[] {
  * (e.g., Function.prototype.toString may behave differently in
  * some runtimes).
  */
-export function applySelfIntegrity(ast: any): void {
+export function applySelfIntegrity(ast: any, cspSafe = false): void {
   const checks: any[][] = [];
 
   // Collect function names for toString checks
@@ -231,10 +231,13 @@ export function applySelfIntegrity(ast: any): void {
   // Build 2-4 integrity checks from different categories
   const numChecks = randInt(2, 4);
   const availableChecks: (() => any[])[] = [
-    () => buildEvalIntegrityCheck(buildTamperResponse()),
     () => buildToStringIntegrityCheck(buildTamperResponse()),
     () => buildTimingCheck(buildTamperResponse()),
   ];
+
+  // The safe profile does not depend on eval existing or retaining native form.
+  // Function.prototype.toString is inspected, never invoked as a constructor.
+  if (!cspSafe) availableChecks.unshift(() => buildEvalIntegrityCheck(buildTamperResponse()));
 
   // Add function-specific checks if we have function names
   if (fnNames.length > 0) {
